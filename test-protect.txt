@@ -1,0 +1,11 @@
+# Protection-map for demo-app full pipeline test
+# Format: <method_spec> <level>  (0=none, 1=extract, 2=vmp, 3=dex2c)
+
+# Extract: on-demand method body restore
+Lcom/example/demo/MainActivity;->onCreate(Landroid/os/Bundle;)V 1
+Lcom/example/demo/MainActivity;->runCryptoTest()V 1
+
+# VMP: Dalvik bytecode → VMP interpreter
+Lcom/example/demo/CryptoHelper;->encrypt(Ljava/lang/String;)Ljava/lang/String; 2
+Lcom/example/demo/CryptoHelper;->decrypt(Ljava/lang/String;)Ljava/lang/String; 2
+Lcom/example/demo/LicenseManager;->validateLicense(Ljava/lang/String;)Z 2

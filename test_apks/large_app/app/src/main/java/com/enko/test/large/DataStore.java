@@ -1,0 +1,13 @@
+package com.enko.test.large;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class DataStore {
+    private static final Map<String, String> store = new HashMap<>();
+
+    public static void put(String key, String value) { store.put(key, value); }
+    public static String get(String key) { return store.get(key); }
+    public static int size() { return store.size(); }
+    public static void clear() { store.clear(); }
+}

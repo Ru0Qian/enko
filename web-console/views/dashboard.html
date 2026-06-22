@@ -1,0 +1,184 @@
+<section id="view-dashboard" class="view-section active">
+<!-- Dashboard Content -->
+<div class="pt-24 px-8 pb-12">
+<!-- Bento Stats Summary -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+<!-- Stat Card 1: Total APKs -->
+<div class="surface-container-high rounded-xl p-6">
+<div class="flex justify-between items-start mb-3">
+<div>
+<p class="text-on-surface-variant text-xs font-medium mb-1">累计加固 APK 数</p>
+<h3 id="dash-total-apk" class="text-3xl font-headline font-bold text-on-surface">0</h3>
+</div>
+<div class="p-2 rounded-lg bg-primary/10 text-primary">
+<span class="material-symbols-outlined">inventory_2</span>
+</div>
+</div>
+<span id="dash-total-trend" class="text-secondary text-xs font-bold">—</span>
+</div>
+<!-- Stat Card 2: Avg Score -->
+<div class="surface-container-high rounded-xl p-6">
+<div class="flex justify-between items-start mb-3">
+<div>
+<p class="text-on-surface-variant text-xs font-medium mb-1">平均安全评分</p>
+<h3 id="dash-avg-score" class="text-3xl font-headline font-bold text-secondary">—</h3>
+</div>
+<div class="p-2 rounded-lg bg-secondary/10 text-secondary">
+<span class="material-symbols-outlined">verified_user</span>
+</div>
+</div>
+<div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+<div id="dash-avg-bar" class="bg-secondary h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+</div>
+<p id="dash-avg-note" class="text-[10px] text-slate-500 mt-2 italic">暂无数据</p>
+</div>
+<!-- Stat Card 3: Today Tasks -->
+<div class="surface-container-high rounded-xl p-6">
+<div class="flex justify-between items-start mb-3">
+<div>
+<p class="text-on-surface-variant text-xs font-medium mb-1">今日任务数</p>
+<h3 id="dash-today-tasks" class="text-3xl font-headline font-bold text-tertiary">0</h3>
+</div>
+<div class="p-2 rounded-lg bg-tertiary/10 text-tertiary">
+<span class="material-symbols-outlined">tactic</span>
+</div>
+</div>
+<span id="dash-today-detail" class="text-[10px] text-on-surface-variant font-medium">— 完成 / — 运行中</span>
+</div>
+<!-- Stat Card 4: Success Rate (dynamic color) -->
+<div class="surface-container-high rounded-xl p-6">
+<div class="flex justify-between items-start mb-3">
+<div>
+<p class="text-on-surface-variant text-xs font-medium mb-1">任务成功率</p>
+<h3 id="dash-success-rate" class="text-3xl font-headline font-bold text-slate-400">—</h3>
+</div>
+<div id="dash-success-icon" class="p-2 rounded-lg bg-slate-800 text-slate-400">
+<span class="material-symbols-outlined">monitoring</span>
+</div>
+</div>
+<span id="dash-success-note" class="text-[10px] text-on-surface-variant font-medium">暂无数据</span>
+</div>
+</div>
+<!-- Main Asymmetric Grid -->
+<div class="grid grid-cols-12 gap-8">
+<!-- Left: Recent Jobs Table -->
+<div class="col-span-12 lg:col-span-8">
+<div class="flex items-center justify-between mb-6">
+<h2 class="text-xl font-headline font-bold">最近的任务</h2>
+<button class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-outline-variant/30 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" onclick="navigateTo('jobs')">
+  <span class="material-symbols-outlined text-sm">list_alt</span>全部任务
+</button>
+</div>
+<div class="surface-container-low rounded-xl overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-high/50">
+<th scope="col" class="px-6 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">任务名称</th>
+<th scope="col" class="px-6 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">状态</th>
+<th scope="col" class="px-6 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">安全评分</th>
+<th scope="col" class="px-6 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">时间</th>
+<th scope="col" class="px-4 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold w-12"></th>
+</tr>
+</thead>
+<tbody id="dash-jobs-tbody" class="divide-y divide-slate-800/30">
+<tr>
+<td colspan="5" class="px-6 py-12 text-center">
+<div class="empty-state">
+<span class="material-symbols-outlined">inbox</span>
+<p class="text-sm font-medium text-on-surface mb-1">暂无任务记录</p>
+<p class="text-xs text-on-surface-variant">开始一个新的加固任务吧</p>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Right Column: Sidebar -->
+<div class="col-span-12 lg:col-span-4 space-y-8">
+<!-- Safety Distribution Donut -->
+<div class="surface-container-high rounded-xl p-6">
+<h2 class="text-sm font-headline font-bold mb-6">安全等级分布</h2>
+<div class="relative w-48 h-48 mx-auto flex items-center justify-center">
+<!-- SVG Donut Chart Mockup -->
+<svg class="w-full h-full transform -rotate-90">
+<circle cx="50%" cy="50%" fill="transparent" r="40%" stroke="#192540" stroke-width="20"></circle>
+<circle class="drop-shadow-[0_0_8px_#69f6b8]" cx="50%" cy="50%" fill="transparent" r="40%" stroke="#69f6b8" stroke-dasharray="251 251" stroke-dashoffset="60" stroke-width="20"></circle>
+<circle cx="50%" cy="50%" fill="transparent" r="40%" stroke="#85adff" stroke-dasharray="251 251" stroke-dashoffset="180" stroke-width="20"></circle>
+<circle cx="50%" cy="50%" fill="transparent" r="40%" stroke="#ac8aff" stroke-dasharray="251 251" stroke-dashoffset="230" stroke-width="20"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span id="dash-grade-pct" class="text-2xl font-bold font-headline">—</span>
+<span class="text-[10px] text-slate-500 uppercase">A/B 等级</span>
+</div>
+</div>
+<div class="mt-6 grid grid-cols-2 gap-4">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-secondary"></div>
+<span id="dash-grade-a" class="text-xs text-on-surface-variant">A 级 (—)</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary"></div>
+<span id="dash-grade-b" class="text-xs text-on-surface-variant">B 级 (—)</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-tertiary"></div>
+<span id="dash-grade-c" class="text-xs text-on-surface-variant">C 级 (—)</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-error"></div>
+<span id="dash-grade-d" class="text-xs text-on-surface-variant">D 级 (—)</span>
+</div>
+</div>
+</div>
+<!-- Engine Status Card -->
+<div class="bg-gradient-to-br from-surface-container-high to-surface-container rounded-xl p-6 border border-outline-variant/10">
+<div class="flex items-center gap-3 mb-6">
+<div class="w-10 h-10 rounded bg-slate-900 flex items-center justify-center text-secondary border border-secondary/20">
+<span class="material-symbols-outlined">bolt</span>
+</div>
+<div>
+<h2 class="text-sm font-headline font-bold">引擎状态</h2>
+<p class="text-[10px] text-slate-500"><span id="dash-engine-version">—</span></p>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-center">
+<span class="text-xs text-slate-400">流水线健康度</span>
+<span id="dash-health-pct" class="text-xs font-bold text-secondary">—</span>
+</div>
+<div class="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+<div id="dash-health-bar" class="bg-secondary h-full" style="width: 0%"></div>
+</div>
+<div class="pt-4 border-t border-slate-800/50 space-y-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-xs text-slate-500">hourglass_empty</span>
+<span id="dash-status-1" class="text-[10px] text-slate-300">检查中...</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-xs text-slate-500">hourglass_empty</span>
+<span id="dash-status-2" class="text-[10px] text-slate-300">检查中...</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-xs text-slate-500">hourglass_empty</span>
+<span id="dash-status-3" class="text-[10px] text-slate-300">检查中...</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Threat Pulse Component -->
+<div class="surface-container-highest rounded-xl p-6 border border-tertiary/20 flex flex-col items-center justify-center text-center relative overflow-hidden group">
+<div class="absolute inset-0 bg-tertiary/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="w-16 h-16 rounded-full bg-tertiary/10 flex items-center justify-center mb-4 relative">
+<div class="absolute inset-0 rounded-full border border-tertiary/30 animate-ping opacity-20"></div>
+<span class="material-symbols-outlined text-tertiary text-2xl" style="font-variation-settings: 'FILL' 1;">leak_add</span>
+</div>
+<h4 id="dash-threat-title" class="text-sm font-headline font-bold text-tertiary">引擎就绪</h4>
+<p id="dash-threat-text" class="text-[10px] text-slate-400 mt-2 px-4 leading-relaxed">
+                            系统运行正常，风险检测引擎已就绪
+                        </p>
+</div>
+</div>
+</div>
+</div>
+</section>

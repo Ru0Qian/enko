@@ -1,0 +1,40 @@
+[Unit]
+Description=Enko APK Hardening Web Console
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=enko
+Group=enko
+WorkingDirectory=/opt/enko
+EnvironmentFile=/etc/enko/config.env
+# uvicorn uses --app-dir to make web-console importable as a top-level package
+# despite its hyphenated directory name (Python can't import "web-console").
+ExecStart=/opt/enko/venv/bin/uvicorn \
+    server_prod:app \
+    --app-dir /opt/enko/web-console \
+    --host ${ENKO_HOST} \
+    --port ${ENKO_PORT} \
+    --workers ${ENKO_WORKERS} \
+    --log-level info \
+    --access-log \
+    --proxy-headers \
+    --forwarded-allow-ips='127.0.0.1'
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=120
+TimeoutStopSec=30
+KillMode=mixed
+RestartForceExitStatus=1 2
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/enko/web-console/.job-cache /opt/enko/output /tmp
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN" data-theme="dark"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>哨兵控制台 - Enko APK 加固引擎</title>
+<!-- Apply persisted theme before any paint to avoid flash -->
+<script>(function(){try{var t=localStorage.getItem('enko_theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches){document.documentElement.setAttribute('data-theme','light');}}catch(_){}})();</script>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="theme.css?v=2.7.0"/>
+<script src="js/ui.js?v=2.7.0"></script>
+<script>
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "on-secondary-fixed":"#00452d","surface-container-highest":"#192540","secondary-dim":"#58e7ab",
+        "tertiary":"#ac8aff","primary-dim":"#699cff","secondary-fixed":"#69f6b8",
+        "tertiary-fixed-dim":"#b091ff","on-surface":"#dee5ff","on-primary-fixed":"#000000",
+        "on-primary-fixed-variant":"#002a62","tertiary-dim":"#8455ef","error":"#ff716c",
+        "background":"#060e20","on-tertiary-container":"#000000","on-error-container":"#ffa8a3",
+        "outline":"#6d758c","on-tertiary-fixed":"#1f0052","surface-container-high":"#141f38",
+        "outline-variant":"#40485d","on-tertiary":"#280067","secondary":"#69f6b8",
+        "inverse-on-surface":"#4d556b","primary":"#85adff","secondary-fixed-dim":"#58e7ab",
+        "surface-variant":"#192540","on-primary-container":"#002150","on-secondary-container":"#e1ffec",
+        "surface":"#060e20","tertiary-container":"#8f60fa","inverse-primary":"#005bc4",
+        "surface-container-low":"#091328","primary-fixed":"#6e9fff","surface-container":"#0f1930",
+        "error-container":"#9f0519","on-secondary":"#005a3c","primary-container":"#6e9fff",
+        "tertiary-fixed":"#bda2ff","on-background":"#dee5ff","surface-bright":"#1f2b49",
+        "surface-tint":"#85adff","on-surface-variant":"#a3aac4","primary-fixed-dim":"#5391ff",
+        "secondary-container":"#006c49","on-primary":"#002c66","inverse-surface":"#faf8ff",
+        "on-tertiary-fixed-variant":"#4600a8","error-dim":"#d7383b","surface-container-lowest":"#000000",
+        "on-secondary-fixed-variant":"#006544","surface-dim":"#060e20","on-error":"#490006"
+      },
+      borderRadius: { DEFAULT:"0.125rem", lg:"0.25rem", xl:"0.5rem", full:"0.75rem" },
+      fontFamily: { headline:["Space Grotesk"], body:["Inter"], label:["Inter"] }
+    }
+  }
+}
+</script>
+</head>
+<body class="text-on-surface">
+
+<!-- Toast Container -->
+<div id="toast-container" class="fixed top-[72px] right-6 z-[9999] flex flex-col gap-3 pointer-events-none max-w-sm"></div>
+
+<!-- ========== SIDEBAR ========== -->
+<aside id="sidebar" class="fixed left-0 top-0 h-full flex flex-col bg-slate-950/60 backdrop-blur-xl w-64 border-r border-slate-800/50 shadow-2xl shadow-blue-900/10 z-50 transition-transform duration-300 md:translate-x-0 -translate-x-full" aria-label="侧边栏导航">
+<div class="p-6">
+  <div class="flex items-center gap-3">
+    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-container flex items-center justify-center shadow-lg shadow-primary/20">
+      <span class="material-symbols-outlined text-on-primary-fixed" style="font-variation-settings:'FILL' 1;">security</span>
+    </div>
+    <div>
+      <h1 class="text-xl font-bold tracking-tighter text-blue-400 font-headline">哨兵控制台</h1>
+      <p class="text-[10px] uppercase tracking-widest text-slate-500 font-headline">APK 加固引擎</p>
+    </div>
+  </div>
+</div>
+<nav class="flex-1 mt-4 px-4 space-y-2" role="navigation" aria-label="主导航">
+  <a data-nav="dashboard" class="nav-link flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 font-headline tracking-tight active:scale-95 cursor-pointer" role="link" tabindex="0">
+    <span class="material-symbols-outlined" aria-hidden="true">dashboard</span><span class="font-medium">控制面板</span>
+  </a>
+  <a data-nav="new-job" class="nav-link flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 font-headline tracking-tight active:scale-95 cursor-pointer" role="link" tabindex="0">
+    <span class="material-symbols-outlined" aria-hidden="true">security</span><span class="font-medium">新建任务</span>
+  </a>
+  <a data-nav="jobs" class="nav-link flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 font-headline tracking-tight active:scale-95 cursor-pointer" role="link" tabindex="0">
+    <span class="material-symbols-outlined" aria-hidden="true">list_alt</span><span class="font-medium">任务列表</span>
+  </a>
+  <a data-nav="reports" class="nav-link flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 font-headline tracking-tight active:scale-95 cursor-pointer" role="link" tabindex="0">
+    <span class="material-symbols-outlined" aria-hidden="true">analytics</span><span class="font-medium">报告分析</span>
+  </a>
+  <a data-nav="profiles" class="nav-link flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 font-headline tracking-tight active:scale-95 cursor-pointer" role="link" tabindex="0">
+    <span class="material-symbols-outlined" aria-hidden="true">account_circle</span><span class="font-medium">配置方案</span>
+  </a>
+  <a data-nav="admin" id="nav-admin" class="nav-link flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 font-headline tracking-tight active:scale-95 cursor-pointer hidden" role="link" tabindex="0">
+    <span class="material-symbols-outlined" aria-hidden="true">admin_panel_settings</span><span class="font-medium">用户管理</span>
+  </a>
+</nav>
+<div class="p-4 mt-auto text-center text-xs text-slate-600">Enko v2.2</div>
+</aside>
+<div id="sidebarOverlay" class="fixed inset-0 bg-black/50 z-40 hidden md:hidden" onclick="toggleSidebar()"></div>
+
+<!-- ========== TOP BAR ========== -->
+<header id="topbar" class="fixed top-0 right-0 left-0 md:left-64 flex items-center justify-between px-4 md:px-8 z-40 bg-slate-950/80 backdrop-blur-md h-16 border-b border-slate-800/50">
+<div class="flex items-center gap-2">
+  <button id="menuToggle" class="md:hidden p-1 rounded-lg hover:bg-surface-container-high" onclick="toggleSidebar()" aria-label="菜单">
+    <span class="material-symbols-outlined text-slate-400">menu</span>
+  </button>
+  <span class="text-blue-500 material-symbols-outlined" id="topbar-icon">terminal</span>
+  <span class="font-headline text-sm uppercase tracking-widest text-blue-400 font-semibold" id="topbar-title">控制面板</span>
+</div>
+<div class="flex items-center gap-8">
+  <div class="relative flex items-center">
+    <span class="material-symbols-outlined absolute left-3 text-slate-500 text-sm">search</span>
+    <input id="global-search" class="bg-surface-container-low border-none rounded-full pl-10 pr-4 py-1.5 text-xs text-on-surface w-64 focus:ring-1 focus:ring-primary placeholder:text-slate-600" placeholder="搜索任务或资产..." type="text"/>
+  </div>
+  <div class="flex items-center gap-6">
+    <div class="flex items-center gap-2 px-3 py-1 bg-secondary/10 rounded-full">
+      <div id="system-status-dot" class="w-2 h-2 rounded-full bg-secondary animate-pulse"></div>
+      <span id="system-status-text" class="text-[10px] font-bold text-secondary uppercase tracking-tighter">系统：在线</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <button class="theme-toggle" data-theme-toggle aria-label="切换主题" title="切换深色/浅色主题">
+        <span class="material-symbols-outlined sun-icon" style="font-size:18px;">light_mode</span>
+        <span class="material-symbols-outlined moon-icon" style="font-size:18px;">dark_mode</span>
+      </button>
+      <span class="material-symbols-outlined text-slate-500 hover:text-blue-300 cursor-pointer" aria-label="通知" role="button" tabindex="0">notifications</span>
+      <span class="material-symbols-outlined text-slate-500 hover:text-blue-300 cursor-pointer" aria-label="安全" role="button" tabindex="0">shield</span>
+      <div class="relative group">
+        <div class="w-8 h-8 rounded-full overflow-hidden border border-slate-700 bg-slate-800 flex items-center justify-center cursor-pointer">
+          <span class="material-symbols-outlined text-slate-400 text-sm">person</span>
+        </div>
+        <div class="absolute right-0 top-full mt-2 w-48 bg-surface-container-high border border-outline-variant/30 rounded-xl shadow-xl hidden group-hover:block z-50">
+          <div class="p-3 border-b border-slate-800/50">
+            <p id="topbar-username" class="text-xs font-bold text-on-surface">admin</p>
+            <p class="text-[10px] text-slate-500">管理员</p>
+          </div>
+          <button id="changePasswordBtn" class="w-full px-4 py-2.5 text-left text-xs text-on-surface-variant hover:bg-surface-bright transition-colors flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">lock_reset</span>修改密码
+          </button>
+          <button id="logoutBtn" class="w-full px-4 py-2.5 text-left text-xs text-error hover:bg-error/10 transition-colors flex items-center gap-2 rounded-b-xl">
+            <span class="material-symbols-outlined text-sm">logout</span>退出登录
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</header>
+
+<!-- ========== MAIN ========== -->
+<main class="md:ml-64 min-h-screen">
+
+<!-- Auth Loading Spinner (shown during token check) -->
+<div id="auth-loading" class="fixed inset-0 z-[60] bg-slate-950 flex items-center justify-center">
+  <div class="text-center">
+    <div class="w-12 h-12 border-3 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
+    <p class="text-sm text-slate-400 font-medium">正在验证身份...</p>
+  </div>
+</div>
+
+<!-- ==================== VIEW: DASHBOARD ==================== -->
+<div id="view-host"><!-- views injected here by js/views.js --></div>
+
+<!-- ==================== VIEW: NEW JOB ==================== -->
+
+<!-- ==================== VIEW: JOBS ==================== -->
+
+<!-- ==================== VIEW: JOB DETAIL ==================== -->
+
+
+<!-- ==================== VIEW: PROFILES ==================== -->
+
+<!-- ==================== VIEW: ADMIN (User Management) ==================== -->
+
+</main>
+
+<!-- app.js 所需的隐藏表单元素（新 UI 无对应可视组件的字段） -->
+<div id="enko-hidden-fields" style="display:none">
+<input id="flutterMode" type="checkbox"/>
+<div id="gatesFlow"></div>
+<template id="gateTemplate"><div class="gate-card"><span class="gate-step"></span><h3></h3><p></p></div></template>
+<!-- 仪表板英雄区元素 -->
+<span id="heroGateCount">6</span>
+<span id="heroMode">Flutter</span>
+<span id="heroPolicy">block / strict</span>
+<span id="profileBadge">Flutter 生产</span>
+<!-- 报告分析元素 -->
+<span id="scoreValue"></span>
+<span id="gradeValue"></span>
+<span id="modeValue"></span>
+<span id="policyValue"></span>
+<span id="coverageValue"></span>
+<span id="coverageRole"></span>
+<span id="nativeCoreValue"></span>
+<span id="hookTargetsValue"></span>
+<div id="controlsList"></div>
+<div id="nativeCoreList"></div>
+<div id="methodStats"></div>
+<div id="recommendationsList"></div>
+</div>
+
+<script src="js/utils.js?v=2.6.0"></script>
+<script src="js/api.js?v=2.6.0"></script>
+<script src="js/analyzer.js?v=2.6.1"></script>
+<script src="js/report.js?v=2.6.2"></script>
+<script src="js/jobs.js?v=2.6.2"></script>
+<script src="js/views.js?v=2.7.0"></script>
+<script src="app.js?v=2.7.0"></script>
+</body></html>

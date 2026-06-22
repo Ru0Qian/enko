@@ -1,0 +1,135 @@
+{
+  "score": 95,
+  "max_score": 105,
+  "grade": "A",
+  "controls": [
+    {
+      "name": "signed-output",
+      "weight": 20,
+      "points": 20,
+      "enabled": true
+    },
+    {
+      "name": "runtime-signature-pin",
+      "weight": 15,
+      "points": 15,
+      "enabled": true
+    },
+    {
+      "name": "per-apk-payload-key",
+      "weight": 15,
+      "points": 15,
+      "enabled": true
+    },
+    {
+      "name": "risk-policy-block",
+      "weight": 10,
+      "points": 10,
+      "enabled": true
+    },
+    {
+      "name": "risk-profile-strict",
+      "weight": 10,
+      "points": 10,
+      "enabled": true
+    },
+    {
+      "name": "block-proxy-vpn",
+      "weight": 5,
+      "points": 5,
+      "enabled": true
+    },
+    {
+      "name": "emulator-check-enabled",
+      "weight": 5,
+      "points": 0,
+      "enabled": false
+    },
+    {
+      "name": "no-fail-open",
+      "weight": 10,
+      "points": 10,
+      "enabled": true
+    },
+    {
+      "name": "zipalign-enabled",
+      "weight": 5,
+      "points": 5,
+      "enabled": true
+    },
+    {
+      "name": "method-protection-coverage",
+      "weight": 5,
+      "points": 0,
+      "enabled": false,
+      "requested_total": 0,
+      "compiled_total": 0,
+      "coverage_grade": "E",
+      "role": "primary"
+    },
+    {
+      "name": "commercial-mode",
+      "weight": 5,
+      "points": 5,
+      "enabled": true
+    }
+  ],
+  "recommendations": [
+    "emulator-check-enabled",
+    "method-protection-missing"
+  ],
+  "method_protection": {
+    "requested": {
+      "extract": 0,
+      "vmp_dex": 0,
+      "dex2c": 0
+    },
+    "compiled": {
+      "extract": 0,
+      "vmp_dex": 0,
+      "dex2c": 0
+    },
+    "requested_total": 0,
+    "compiled_total": 0,
+    "enabled_phases": 0,
+    "compiled_phases": 0,
+    "request_hit_ratio": 0.0,
+    "protectable_methods_total": 1049,
+    "protectable_coverage_ratio": 0.0,
+    "coverage_target_ratio": 0.05,
+    "coverage_grade": "E",
+    "role": "primary",
+    "score_ratio": 0.0,
+    "score_points": 0
+  },
+  "target_runtime": {
+    "mode": "standard",
+    "flutter_detected": false,
+    "abis": [],
+    "native_core": {
+      "libapp": {
+        "present": false,
+        "path_count": 0,
+        "integrity_pinned": false,
+        "paths": []
+      },
+      "libflutter": {
+        "present": false,
+        "path_count": 0,
+        "integrity_pinned": false,
+        "paths": []
+      },
+      "hook_watch_targets": [
+        "agpcore"
+      ]
+    }
+  },
+  "compiled": {
+    "extract": 0,
+    "vmp_dex": 0,
+    "dex2c": 0
+  },
+  "output_apk": "D:\\Engineering\\projects\\enko\\test_apks\\large_hardened.apk",
+  "risk_policy": "block",
+  "risk_profile": "strict"
+}

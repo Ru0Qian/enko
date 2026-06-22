@@ -1,0 +1,7 @@
+# DEX2C methods — premium/network classes
+Lcom/example/demo/PremiumFeature;->callSecretApi
+Lcom/example/demo/PremiumFeature;->getDeviceFingerprint
+Lcom/example/demo/PremiumFeature;->decryptUserData
+Lcom/example/demo/NetworkHelper;->fetchUrl
+Lcom/example/demo/NetworkHelper;->sha256
+Lcom/example/demo/NetworkHelper;->hmacSign

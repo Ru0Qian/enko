@@ -1,0 +1,2 @@
+Lcom/enko/test/small/MainActivity;->verifySubmittedFlag
+Lcom/enko/test/small/FlagChecker;->recoverFlag

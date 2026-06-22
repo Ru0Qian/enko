@@ -1,0 +1,58 @@
+<section id="view-jobs" class="view-section">
+<div class="pt-24 px-4 md:px-8 pb-12 max-w-7xl mx-auto">
+  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div>
+      <div class="flex items-center gap-3 mb-2">
+        <span class="material-symbols-outlined text-primary text-2xl">list_alt</span>
+        <h2 class="font-headline text-2xl font-bold tracking-tight">任务列表</h2>
+      </div>
+      <p class="text-sm text-on-surface-variant">所有加固任务都会保留在这里，运行中任务会继续后台同步。</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-3">
+      <div class="relative">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">search</span>
+        <input id="jobsSearchInput" class="bg-surface-container-low border border-outline-variant/30 rounded-lg pl-9 pr-3 py-2 text-xs text-on-surface w-64 focus:ring-1 focus:ring-primary placeholder:text-slate-600" placeholder="搜索任务 ID / APK / 状态"/>
+      </div>
+      <select id="jobsStatusFilter" class="bg-surface-container-low border border-outline-variant/30 rounded-lg px-3 py-2 text-xs text-on-surface focus:ring-1 focus:ring-primary">
+        <option value="all">全部状态</option>
+        <option value="running">运行中</option>
+        <option value="queued">排队中</option>
+        <option value="succeeded">成功</option>
+        <option value="failed">失败</option>
+      </select>
+      <button id="jobsRefreshBtn" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-surface-container-high border border-outline-variant/30 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors">
+        <span class="material-symbols-outlined text-sm">refresh</span>刷新
+      </button>
+      <button class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-on-primary-fixed text-xs font-bold hover:brightness-110 transition-colors" onclick="navigateTo('new-job')">
+        <span class="material-symbols-outlined text-sm">add</span>新建任务
+      </button>
+    </div>
+  </div>
+
+  <div class="surface-container-low rounded-xl overflow-hidden border border-outline-variant/20">
+    <table class="w-full text-left border-collapse">
+      <thead>
+        <tr class="bg-surface-container-high/60">
+          <th scope="col" class="px-5 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">任务</th>
+          <th scope="col" class="px-5 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">状态</th>
+          <th scope="col" class="px-5 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">方法保护</th>
+          <th scope="col" class="px-5 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">评分</th>
+          <th scope="col" class="px-5 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">创建时间</th>
+          <th scope="col" class="px-5 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold w-20"></th>
+        </tr>
+      </thead>
+      <tbody id="jobsListTbody" class="divide-y divide-slate-800/30">
+        <tr>
+          <td colspan="6" class="px-6 py-12 text-center">
+            <div class="empty-state">
+              <span class="material-symbols-outlined">inbox</span>
+              <p class="text-sm font-medium text-on-surface mb-1">暂无任务记录</p>
+              <p class="text-xs text-on-surface-variant">新建任务后会出现在这里</p>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</section>

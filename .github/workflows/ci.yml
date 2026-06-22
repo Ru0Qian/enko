@@ -1,0 +1,179 @@
+name: CI
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+    inputs:
+      run_device_smoke:
+        description: "Run Android device smoke on a self-hosted runner with adb online"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      device_smoke_scenario:
+        description: "Scenario to smoke when run_device_smoke=true"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - "all"
+          - "java-basic"
+          - "reflection"
+          - "native-jni"
+          - "resource-state"
+          - "complex-business"
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: mypy type check (packer)
+        run: mypy --strict packer/
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest tests/ -v --cov=packer --cov-report=term-missing
+
+  hygiene-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Repository hygiene check
+        run: python tools/check_repo_hygiene.py
+
+      - name: Validate release manifest
+        run: python packer/release_manifest_tool.py validate --manifest release/release_manifest.json --check-files
+
+  scenario-apk-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build components
+        run: |
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build semantic scenario APKs
+        run: |
+          chmod +x shell-app/gradlew
+          shell-app/gradlew -p test_apks/scenario_app assembleDebug --no-daemon
+
+      - name: Verify scenario catalog paths
+        run: |
+          python tools/run_scenario_matrix.py --skip-build --skip-harden --smoke never --gradle "$GITHUB_WORKSPACE/shell-app/gradlew" --summary-json output/scenario-matrix/ci-build-summary.json
+
+      - name: Upload scenario APK summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: scenario-apk-build-summary
+          path: output/scenario-matrix/ci-build-summary.json
+          if-no-files-found: error
+
+  security-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Bandit security scan (packer)
+        run: bandit -r packer/ -ll
+
+  device-smoke:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_device_smoke == 'true' }}
+    runs-on: [self-hosted, android]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Build and smoke raw semantic scenarios
+        shell: bash
+        run: |
+          chmod +x shell-app/gradlew
+          args=()
+          if [[ "${{ inputs.device_smoke_scenario }}" != "all" ]]; then
+            args+=(--scenario "${{ inputs.device_smoke_scenario }}")
+          fi
+          python tools/run_scenario_matrix.py "${args[@]}" --skip-harden --smoke always --smoke-raw --gradle "$GITHUB_WORKSPACE/shell-app/gradlew" --summary-json output/device-smoke/raw-summary.json
+
+      - name: Upload device smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: device-smoke-diagnostics
+          path: output/device-smoke
+          if-no-files-found: ignore

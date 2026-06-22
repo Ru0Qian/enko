@@ -1,0 +1,27 @@
+# Auto-generated protection map
+# include-packages: com.example.demo
+# level: 0=none, 1=extract, 2=vmp, 3=dex2c
+
+# Phase 4.1 Extract
+Lcom/example/demo/MainActivity;->onCreate(Landroid/os/Bundle;)V 1
+Lcom/example/demo/MainActivity;->lambda$onCreate$3(Landroid/view/View;)V 1
+Lcom/example/demo/MainActivity;->lambda$onCreate$2(Landroid/view/View;)V 1
+Lcom/example/demo/DemoApplication;->onCreate()V 1
+Lcom/example/demo/MainActivity;->lambda$onCreate$0(Landroid/widget/EditText;Landroid/view/View;)V 1
+Lcom/example/demo/MainActivity;->updateStatus()V 1
+
+# Phase 4.3 VMP DEX
+Lcom/example/demo/CryptoHelper;->hexToBytes(Ljava/lang/String;)[B 2
+Lcom/example/demo/MainActivity;->runCryptoTest()V 2
+Lcom/example/demo/CryptoHelper;->decrypt(Ljava/lang/String;)Ljava/lang/String; 2
+Lcom/example/demo/CryptoHelper;->encrypt(Ljava/lang/String;)Ljava/lang/String; 2
+Lcom/example/demo/LicenseManager;->activate(Ljava/lang/String;)V 2
+Lcom/example/demo/LicenseManager;->getStatusText()Ljava/lang/String; 2
+Lcom/example/demo/LicenseManager;->loadState()V 2
+Lcom/example/demo/MainActivity;->appendInfo(Ljava/lang/String;)V 2
+Lcom/example/demo/c;->a(Ljava/lang/String;I)Ljava/lang/String; 2
+Lcom/example/demo/b;->onClick(Landroid/view/View;)V 2
+
+# Phase 4.2 DEX2C
+Lcom/example/demo/LicenseManager;->validateLicense(Ljava/lang/String;)Z 3
+Lcom/example/demo/LicenseManager;->isActivated()Z 3

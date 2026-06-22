@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sentinel Console - Enko APK Hardening</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script>
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "on-secondary-fixed":"#00452d","surface-container-highest":"#192540","secondary-dim":"#58e7ab",
+        "tertiary":"#ac8aff","primary-dim":"#699cff","secondary-fixed":"#69f6b8",
+        "tertiary-fixed-dim":"#b091ff","on-surface":"#dee5ff","on-primary-fixed":"#000000",
+        "on-primary-fixed-variant":"#002a62","tertiary-dim":"#8455ef","error":"#ff716c",
+        "background":"#060e20","on-tertiary-container":"#000000","on-error-container":"#ffa8a3",
+        "outline":"#6d758c","on-tertiary-fixed":"#1f0052","surface-container-high":"#141f38",
+        "outline-variant":"#40485d","on-tertiary":"#280067","secondary":"#69f6b8",
+        "inverse-on-surface":"#4d556b","primary":"#85adff","secondary-fixed-dim":"#58e7ab",
+        "surface-variant":"#192540","on-primary-container":"#002150","on-secondary-container":"#e1ffec",
+        "surface":"#060e20","tertiary-container":"#8f60fa","inverse-primary":"#005bc4",
+        "surface-container-low":"#091328","primary-fixed":"#6e9fff","surface-container":"#0f1930",
+        "error-container":"#9f0519","on-secondary":"#005a3c","primary-container":"#6e9fff",
+        "tertiary-fixed":"#bda2ff","on-background":"#dee5ff","surface-bright":"#1f2b49",
+        "surface-tint":"#85adff","on-surface-variant":"#a3aac4","primary-fixed-dim":"#5391ff",
+        "secondary-container":"#006c49","on-primary":"#002c66","inverse-surface":"#faf8ff",
+        "on-tertiary-fixed-variant":"#4600a8","error-dim":"#d7383b","surface-container-lowest":"#000000",
+        "on-secondary-fixed-variant":"#006544","surface-dim":"#060e20","on-error":"#490006"
+      },
+      borderRadius: { DEFAULT:"0.125rem", lg:"0.25rem", xl:"0.5rem", full:"0.75rem" },
+      fontFamily: { headline:["Space Grotesk"], body:["Inter"], label:["Inter"] }
+    }
+  }
+}
+</script>
+<style>
+body { font-family: 'Inter', sans-serif; background-color: #060e20; }
+h1,h2,h3,.font-headline { font-family: 'Space Grotesk', sans-serif; }
+.glass-panel { background: rgba(25, 37, 64, 0.6); backdrop-filter: blur(40px); }
+.glass-card { background: rgba(25, 37, 64, 0.6); backdrop-filter: blur(40px); }
+.material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+.sparkline { height: 32px; width: 100px; }
+.radial-gauge { background: conic-gradient(from 180deg at 50% 50%, #69f6b8 0%, #69f6b8 92%, #192540 92%, #192540 100%); }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #060e20; }
+::-webkit-scrollbar-thumb { background: #40485d; border-radius: 10px; }
+.view-section { display: none; }
+.view-section.active { display: block; }
+.nav-link { color: #94a3b8; }
+.nav-link:hover { color: #e2e8f0; background: rgba(30,41,59,0.5); }
+.nav-link.active { color: #60a5fa; background: rgba(59,130,246,0.1); border-right: 2px solid #3b82f6; }
+.drop-zone.dragover { border-color: #85adff !important; background: rgba(133,173,255,0.05) !important; }
+.surface-container-high { background-color: #141f38; }
+.surface-container-low { background-color: #091328; }
+.surface-container-highest { background-color: #192540; }
+
+/* Skeleton loading */
+.skeleton { background: linear-gradient(90deg, #141f38 25%, #192540 50%, #141f38 75%); background-size: 200% 100%; animation: skeletonShimmer 1.8s ease-in-out infinite; border-radius: 8px; }
+@keyframes skeletonShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skeleton-text { height: 14px; margin-bottom: 8px; }
+.skeleton-text:last-child { width: 60%; }
+.skeleton-card { height: 120px; border-radius: 12px; }
+.skeleton-metric { height: 48px; width: 80px; border-radius: 8px; }
+
+/* Empty state float animation */
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.empty-state-float { animation: float 3s ease-in-out infinite; }
+.empty-state-enhanced { padding: 64px 24px; }
+.empty-state-enhanced .material-symbols-outlined { font-size: 56px; margin-bottom: 16px; opacity: 0.35; }
+
+/* Responsive */
+@media (max-width: 640px) {
+  .modal-card { width: 90vw; padding: 24px; }
+}
+</style>
+</head>
+<body class="text-on-surface">
+
+<!-- ========== SIDEBAR ========== -->
+<aside id="sidebar" class="fixed left-0 top-0 h-full flex flex-col bg-slate-950/60 backdrop-blur-xl w-64 border-r border-slate-800/50 shadow-2xl shadow-blue-900/10 z-50">
+<div class="p-6">
+  <div class="flex items-center gap-3">
+    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-container flex items-center justify-center shadow-lg shadow-primary/20">
+      <span class="material-symbols-outlined text-on-primary-fixed" style="font-variation-settings:'FILL' 1;">security</span>
+    </div>
+    <div>
+      <h1 class="text-xl font-bold tracking-tighter text-blue-400 font-headline">Sentinel Console</h1>
+      <p class="text-[10px] uppercase tracking-widest text-slate-500 font-headline">APK Hardening Engine</p>
+    </div>
+  </div>
+</div>
+<nav class="flex-1 mt-4 px-4 space-y-2">
+  <a data-nav="dashboard" class="nav-link flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 font-headline tracking-tight active:scale-95 cursor-pointer">
+    <span class="material-symbols-outlined">dashboard</span><span class="font-medium">Dashboard</span>
+  </a>
+  <a data-nav="new-job" class="nav-link flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 font-headline tracking-tight active:scale-95 cursor-pointer">
+    <span class="material-symbols-outlined">security</span><span class="font-medium">New Job</span>
+  </a>
+  <a data-nav="reports" class="nav-link flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 font-headline tracking-tight active:scale-95 cursor-pointer">
+    <span class="material-symbols-outlined">analytics</span><span class="font-medium">Reports</span>
+  </a>
+  <a data-nav="profiles" class="nav-link flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 font-headline tracking-tight active:scale-95 cursor-pointer">
+    <span class="material-symbols-outlined">account_circle</span><span class="font-medium">Profiles</span>
+  </a>
+</nav>
+<div class="px-6 py-6 border-t border-slate-800/50">
+  <button id="sidebar-launch-btn" class="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary-fixed py-3 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all">Launch Scan</button>
+</div>
+<div class="p-4 mb-4 space-y-1">
+  <a class="flex items-center gap-4 px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 font-headline text-sm tracking-tight cursor-pointer"><span class="material-symbols-outlined text-lg">settings</span><span>Settings</span></a>
+  <a class="flex items-center gap-4 px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 font-headline text-sm tracking-tight cursor-pointer"><span class="material-symbols-outlined text-lg">help</span><span>Support</span></a>
+</div>
+</aside>
+
+<!-- ========== TOP BAR ========== -->
+<header id="topbar" class="fixed top-0 right-0 left-64 flex items-center justify-between px-8 z-40 bg-slate-950/80 backdrop-blur-md h-16 border-b border-slate-800/50">
+<div class="flex items-center gap-2">
+  <span class="text-blue-500 material-symbols-outlined" id="topbar-icon">terminal</span>
+  <span class="font-headline text-sm uppercase tracking-widest text-blue-400 font-semibold" id="topbar-title">控制面板</span>
+</div>
+<div class="flex items-center gap-8">
+  <div class="relative flex items-center">
+    <span class="material-symbols-outlined absolute left-3 text-slate-500 text-sm">search</span>
+    <input id="global-search" class="bg-surface-container-low border-none rounded-full pl-10 pr-4 py-1.5 text-xs text-on-surface w-64 focus:ring-1 focus:ring-primary placeholder:text-slate-600" placeholder="搜索任务或资产..." type="text"/>
+  </div>
+  <div class="flex items-center gap-6">
+    <div class="flex items-center gap-2 px-3 py-1 bg-secondary/10 rounded-full">
+      <div id="system-status-dot" class="w-2 h-2 rounded-full bg-secondary animate-pulse"></div>
+      <span id="system-status-text" class="text-[10px] font-bold text-secondary uppercase tracking-tighter">System: Online</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <span class="material-symbols-outlined text-slate-500 hover:text-blue-300 cursor-pointer">notifications</span>
+      <span class="material-symbols-outlined text-slate-500 hover:text-blue-300 cursor-pointer">shield</span>
+      <div class="w-8 h-8 rounded-full overflow-hidden border border-slate-700 bg-slate-800 flex items-center justify-center">
+        <span class="material-symbols-outlined text-slate-400 text-sm">person</span>
+      </div>
+    </div>
+  </div>
+</div>
+</header>
+
+<!-- ========== MAIN ========== -->
+<main class="ml-64 min-h-screen">
+
+<!-- ==================== VIEW: DASHBOARD ==================== -->
+<section id="view-dashboard" class="view-section active">
+<!-- Dashboard Content -->
+<div class="pt-24 px-8 pb-12">
+<!-- Bento Stats Summary -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+<!-- Stat Card 1 -->
+<div class="surface-container-high rounded-xl p-6 relative overflow-hidden group">
+<div class="flex justify-between items-start mb-4">
+<div>
+<p class="text-on-surface-variant text-xs font-medium mb-1">累计加固 APK 数</p>
+<h3 class="text-3xl font-headline font-bold text-on-surface">12,842</h3>
+</div>
+<div class="p-2 rounded-lg bg-primary/10 text-primary">
+<span class="material-symbols-outlined">inventory_2</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-secondary text-xs font-bold flex items-center">+12.5%</span>
+<div class="sparkline flex items-end gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
+<div class="w-1 bg-primary h-2"></div><div class="w-1 bg-primary h-4"></div><div class="w-1 bg-primary h-3"></div><div class="w-1 bg-primary h-6"></div><div class="w-1 bg-primary h-5"></div><div class="w-1 bg-primary h-8"></div>
+</div>
+</div>
+</div>
+<!-- Stat Card 2 -->
+<div class="surface-container-high rounded-xl p-6 relative overflow-hidden group">
+<div class="flex justify-between items-start mb-4">
+<div>
+<p class="text-on-surface-variant text-xs font-medium mb-1">平均安全评分</p>
+<h3 class="text-3xl font-headline font-bold text-secondary">88/100</h3>
+</div>
+<div class="p-2 rounded-lg bg-secondary/10 text-secondary">
+<span class="material-symbols-outlined">verified_user</span>
+</div>
+</div>
+<div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+<div class="bg-secondary h-full rounded-full" style="width: 88%"></div>
+</div>
+<p class="text-[10px] text-slate-500 mt-2 italic">高于 92% 的同行业基准</p>
+</div>
+<!-- Stat Card 3 -->
+<div class="surface-container-high rounded-xl p-6 relative overflow-hidden group">
+<div class="flex justify-between items-start mb-4">
+<div>
+<p class="text-on-surface-variant text-xs font-medium mb-1">今日任务数</p>
+<h3 class="text-3xl font-headline font-bold text-tertiary">24</h3>
+</div>
+<div class="p-2 rounded-lg bg-tertiary/10 text-tertiary">
+<span class="material-symbols-outlined">tactic</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border border-slate-900 bg-slate-700"></div>
+<div class="w-6 h-6 rounded-full border border-slate-900 bg-slate-600"></div>
+<div class="w-6 h-6 rounded-full border border-slate-900 bg-slate-500"></div>
+</div>
+<span class="text-[10px] text-on-surface-variant font-medium">16 完成 / 8 运行中</span>
+</div>
+</div>
+<!-- Stat Card 4 -->
+<div class="surface-container-high rounded-xl p-6 relative overflow-hidden group">
+<div class="flex justify-between items-start mb-4">
+<div>
+<p class="text-on-surface-variant text-xs font-medium mb-1">风险拦截率</p>
+<h3 class="text-3xl font-headline font-bold text-error">99.9%</h3>
+</div>
+<div class="p-2 rounded-lg bg-error/10 text-error">
+<span class="material-symbols-outlined">security_update_warning</span>
+</div>
+</div>
+<div class="flex items-end gap-1 h-8">
+<div class="flex-1 bg-error/20 rounded-t-sm h-4"></div>
+<div class="flex-1 bg-error/20 rounded-t-sm h-6"></div>
+<div class="flex-1 bg-error/20 rounded-t-sm h-5"></div>
+<div class="flex-1 bg-error/20 rounded-t-sm h-8"></div>
+<div class="flex-1 bg-error h-7"></div>
+</div>
+</div>
+</div>
+<!-- Main Asymmetric Grid -->
+<div class="grid grid-cols-12 gap-8">
+<!-- Left: Recent Jobs Table -->
+<div class="col-span-12 lg:col-span-8">
+<div class="flex items-center justify-between mb-6">
+<h2 class="text-xl font-headline font-bold">最近的任务</h2>
+<button class="text-primary text-xs font-bold flex items-center gap-1 hover:underline">
+                            查看全部 <span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+<div class="surface-container-low rounded-xl overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-high/50">
+<th class="px-6 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">任务名称</th>
+<th class="px-6 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">状态</th>
+<th class="px-6 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">安全评分</th>
+<th class="px-6 py-4 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">时间</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-800/30">
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-slate-800 flex items-center justify-center">
+<span class="material-symbols-outlined text-slate-400 text-sm">android</span>
+</div>
+<span class="text-sm font-medium">Fintech_v2.4.1_Release</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2 px-2 py-1 rounded bg-secondary/10 text-secondary w-fit">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span class="text-[10px] font-bold uppercase">Success</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-sm font-headline font-bold text-secondary">94</span>
+</td>
+<td class="px-6 py-4 text-xs text-slate-500">12:45 PM</td>
+</tr>
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-slate-800 flex items-center justify-center">
+<span class="material-symbols-outlined text-slate-400 text-sm">android</span>
+</div>
+<span class="text-sm font-medium">SocialApp_BETA_build88</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2 px-2 py-1 rounded bg-primary/10 text-primary w-fit">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+<span class="text-[10px] font-bold uppercase">Building</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-sm font-headline font-bold text-slate-600">Pending</span>
+</td>
+<td class="px-6 py-4 text-xs text-slate-500">11:20 AM</td>
+</tr>
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-slate-800 flex items-center justify-center">
+<span class="material-symbols-outlined text-slate-400 text-sm">android</span>
+</div>
+<span class="text-sm font-medium">E-Commerce_Patch_04</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2 px-2 py-1 rounded bg-secondary/10 text-secondary w-fit">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span class="text-[10px] font-bold uppercase">Success</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-sm font-headline font-bold text-tertiary">82</span>
+</td>
+<td class="px-6 py-4 text-xs text-slate-500">Yesterday</td>
+</tr>
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-slate-800 flex items-center justify-center">
+<span class="material-symbols-outlined text-slate-400 text-sm">android</span>
+</div>
+<span class="text-sm font-medium">GameCloud_Global_v1</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2 px-2 py-1 rounded bg-secondary/10 text-secondary w-fit">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span class="text-[10px] font-bold uppercase">Success</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-sm font-headline font-bold text-secondary">91</span>
+</td>
+<td class="px-6 py-4 text-xs text-slate-500">Yesterday</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Right Column: Sidebar -->
+<div class="col-span-12 lg:col-span-4 space-y-8">
+<!-- Safety Distribution Donut -->
+<div class="surface-container-high rounded-xl p-6">
+<h2 class="text-sm font-headline font-bold mb-6">安全等级分布</h2>
+<div class="relative w-48 h-48 mx-auto flex items-center justify-center">
+<!-- SVG Donut Chart Mockup -->
+<svg class="w-full h-full transform -rotate-90">
+<circle cx="50%" cy="50%" fill="transparent" r="40%" stroke="#192540" stroke-width="20"></circle>
+<circle class="drop-shadow-[0_0_8px_#69f6b8]" cx="50%" cy="50%" fill="transparent" r="40%" stroke="#69f6b8" stroke-dasharray="251 251" stroke-dashoffset="60" stroke-width="20"></circle>
+<circle cx="50%" cy="50%" fill="transparent" r="40%" stroke="#85adff" stroke-dasharray="251 251" stroke-dashoffset="180" stroke-width="20"></circle>
+<circle cx="50%" cy="50%" fill="transparent" r="40%" stroke="#ac8aff" stroke-dasharray="251 251" stroke-dashoffset="230" stroke-width="20"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-2xl font-bold font-headline">76%</span>
+<span class="text-[10px] text-slate-500 uppercase">Grade A/B</span>
+</div>
+</div>
+<div class="mt-6 grid grid-cols-2 gap-4">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-secondary"></div>
+<span class="text-xs text-on-surface-variant">Grade A (42%)</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary"></div>
+<span class="text-xs text-on-surface-variant">Grade B (34%)</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-tertiary"></div>
+<span class="text-xs text-on-surface-variant">Grade C (18%)</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-error"></div>
+<span class="text-xs text-on-surface-variant">Grade D (6%)</span>
+</div>
+</div>
+</div>
+<!-- Engine Status Card -->
+<div class="bg-gradient-to-br from-surface-container-high to-surface-container rounded-xl p-6 border border-outline-variant/10">
+<div class="flex items-center gap-3 mb-6">
+<div class="w-10 h-10 rounded bg-slate-900 flex items-center justify-center text-secondary border border-secondary/20">
+<span class="material-symbols-outlined">bolt</span>
+</div>
+<div>
+<h2 class="text-sm font-headline font-bold">引擎状态</h2>
+<p class="text-[10px] text-slate-500">V3.5.0-STABLE</p>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-center">
+<span class="text-xs text-slate-400">流水线健康度</span>
+<span class="text-xs font-bold text-secondary">98%</span>
+</div>
+<div class="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+<div class="bg-secondary h-full" style="width: 98%"></div>
+</div>
+<div class="pt-4 border-t border-slate-800/50 space-y-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-xs text-secondary">check_circle</span>
+<span class="text-[10px] text-slate-300">VEX 漏洞库已同步 (2h ago)</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-xs text-secondary">check_circle</span>
+<span class="text-[10px] text-slate-300">核心脱壳模块 正常运行</span>
+</div>
+<div class="flex items-center gap-2 text-tertiary">
+<span class="material-symbols-outlined text-xs animate-pulse">sync</span>
+<span class="text-[10px]">3 个分布式节点正在扩容</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Threat Pulse Component -->
+<div class="surface-container-highest rounded-xl p-6 border border-tertiary/20 flex flex-col items-center justify-center text-center relative overflow-hidden group">
+<div class="absolute inset-0 bg-tertiary/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="w-16 h-16 rounded-full bg-tertiary/10 flex items-center justify-center mb-4 relative">
+<div class="absolute inset-0 rounded-full border border-tertiary/30 animate-ping opacity-20"></div>
+<span class="material-symbols-outlined text-tertiary text-2xl" style="font-variation-settings: 'FILL' 1;">leak_add</span>
+</div>
+<h4 class="text-sm font-headline font-bold text-tertiary">实时威胁捕获</h4>
+<p class="text-[10px] text-slate-400 mt-2 px-4 leading-relaxed">
+                            AI 引擎正在扫描全球 0-day 漏洞库并自动更新防御策略
+                        </p>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ==================== VIEW: NEW JOB ==================== -->
+<section id="view-new-job" class="view-section">
+<div class="pt-24 px-8 pb-12">
+<div class="max-w-6xl mx-auto p-10">
+<!-- Stepper Container -->
+<div class="mb-12 flex justify-between items-center relative">
+<div class="absolute top-1/2 left-0 w-full h-[1px] bg-outline-variant -z-10"></div>
+<div class="flex flex-col items-center gap-2 bg-surface px-4">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-on-primary-fixed font-bold border-4 border-surface shadow-[0_0_15px_rgba(133,173,255,0.4)]">1</div>
+<span class="text-xs font-semibold text-primary">基础配置</span>
+</div>
+<div class="flex flex-col items-center gap-2 bg-surface px-4">
+<div class="w-10 h-10 rounded-full bg-surface-container-high border-2 border-outline-variant flex items-center justify-center text-on-surface-variant font-bold">2</div>
+<span class="text-xs font-semibold text-on-surface-variant">风险策略</span>
+</div>
+<div class="flex flex-col items-center gap-2 bg-surface px-4">
+<div class="w-10 h-10 rounded-full bg-surface-container-high border-2 border-outline-variant flex items-center justify-center text-on-surface-variant font-bold">3</div>
+<span class="text-xs font-semibold text-on-surface-variant">方法保护</span>
+</div>
+<div class="flex flex-col items-center gap-2 bg-surface px-4">
+<div class="w-10 h-10 rounded-full bg-surface-container-high border-2 border-outline-variant flex items-center justify-center text-on-surface-variant font-bold">4</div>
+<span class="text-xs font-semibold text-on-surface-variant">签名发布</span>
+</div>
+</div>
+<div class="grid grid-cols-12 gap-8 items-start">
+<!-- Left Column: Primary Config -->
+<div class="col-span-8 space-y-8">
+<!-- Section 1: 基础配置 -->
+<section class="glass-panel p-8 rounded-xl border border-outline-variant/20 shadow-xl">
+<div class="flex items-center gap-4 mb-8">
+<div class="p-2 bg-primary/10 rounded-lg">
+<span class="material-symbols-outlined text-primary" data-icon="settings_input_component">settings_input_component</span>
+</div>
+<div>
+<h2 class="text-xl font-headline font-bold text-white tracking-tight">基础配置</h2>
+<p class="text-sm text-on-surface-variant">设置 APK 输入及加固核心环境</p>
+</div>
+</div>
+<div class="space-y-6">
+<div class="grid grid-cols-2 gap-6">
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-wider text-slate-500">输入 APK</label>
+<div class="relative group">
+<div class="flex items-center justify-center w-full h-32 border-2 border-dashed border-outline-variant rounded-xl bg-surface-container-low group-hover:border-primary transition-all cursor-pointer">
+<div class="text-center">
+<span class="material-symbols-outlined text-primary text-3xl" data-icon="cloud_upload">cloud_upload</span>
+<p class="text-xs mt-2 text-on-surface-variant">点击或拖拽上传 APK 文件</p>
+</div>
+</div>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-wider text-slate-500">壳 DEX</label>
+<div class="relative group">
+<div class="flex items-center justify-center w-full h-32 border-2 border-dashed border-outline-variant rounded-xl bg-surface-container-low group-hover:border-primary transition-all cursor-pointer">
+<div class="text-center">
+<span class="material-symbols-outlined text-secondary text-3xl" data-icon="extension">extension</span>
+<p class="text-xs mt-2 text-on-surface-variant">上传 DEX 保护模板</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-wider text-slate-500">输出路径</label>
+<div class="flex gap-2">
+<input class="w-full bg-surface-container-low border-0 border-b border-outline-variant focus:border-secondary focus:ring-0 text-sm text-on-surface px-4 py-3 rounded-t-lg transition-colors" placeholder="/data/outputs/hardened_builds/" type="text"/>
+<button class="px-4 bg-surface-container-high border border-outline-variant rounded-lg hover:bg-surface-bright transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="folder_open">folder_open</span>
+</button>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-wider text-slate-500">Profile 配置</label>
+<select class="w-full bg-surface-container-low border-0 border-b border-outline-variant focus:border-secondary focus:ring-0 text-sm text-on-surface px-4 py-3 rounded-t-lg">
+<option>Flutter Prod (Optimization High)</option>
+<option>Android Prod (Default)</option>
+<option>Bypass Anti-Debug (Strict)</option>
+<option>Custom Profile...</option>
+</select>
+</div>
+</div>
+</section>
+<!-- Section 3: 方法保护 -->
+<section class="glass-panel p-8 rounded-xl border border-outline-variant/20 shadow-xl">
+<div class="flex items-center gap-4 mb-8">
+<div class="p-2 bg-tertiary/10 rounded-lg">
+<span class="material-symbols-outlined text-tertiary" data-icon="terminal">terminal</span>
+</div>
+<div>
+<h2 class="text-xl font-headline font-bold text-white tracking-tight">方法保护</h2>
+<p class="text-sm text-on-surface-variant">细粒度字节码处理策略</p>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-8">
+<div class="space-y-4">
+<div class="p-4 bg-surface-container-low border border-outline-variant/30 rounded-xl">
+<label class="text-[10px] font-bold text-slate-500 block mb-2">PROTECTION MAP</label>
+<div class="flex items-center justify-between">
+<span class="text-xs text-on-surface-variant italic">No file selected</span>
+<button class="text-xs text-tertiary font-bold hover:underline">BROWSE</button>
+</div>
+</div>
+<div class="p-4 bg-surface-container-low border border-outline-variant/30 rounded-xl">
+<label class="text-[10px] font-bold text-slate-500 block mb-2">TARGET METHODS</label>
+<div class="flex items-center justify-between">
+<span class="text-xs text-on-surface-variant italic">config_methods.json</span>
+<button class="text-xs text-error font-bold hover:underline">REMOVE</button>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-3">
+<label class="flex items-center gap-3 p-4 bg-surface-container rounded-lg cursor-pointer hover:bg-surface-bright transition-colors">
+<input checked="" class="rounded border-outline-variant bg-surface text-tertiary focus:ring-tertiary" type="checkbox"/>
+<span class="text-sm font-medium">方法抽取 (Method Extraction)</span>
+</label>
+<label class="flex items-center gap-3 p-4 bg-surface-container rounded-lg cursor-pointer hover:bg-surface-bright transition-colors">
+<input class="rounded border-outline-variant bg-surface text-tertiary focus:ring-tertiary" type="checkbox"/>
+<span class="text-sm font-medium">Dalvik VMP (Virtual Machine)</span>
+</label>
+<label class="flex items-center gap-3 p-4 bg-surface-container rounded-lg cursor-pointer hover:bg-surface-bright transition-colors">
+<input checked="" class="rounded border-outline-variant bg-surface text-tertiary focus:ring-tertiary" type="checkbox"/>
+<span class="text-sm font-medium">DEX2C (Native Conversion)</span>
+</label>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column: Sidebar Actions -->
+<div class="col-span-4 space-y-8">
+<!-- Section 2: 风险策略 -->
+<section class="glass-panel p-6 rounded-xl border border-outline-variant/20 shadow-xl bg-gradient-to-br from-surface-container-high to-surface-container-low">
+<div class="flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-secondary" data-icon="security">security</span>
+<h2 class="text-lg font-headline font-bold text-white">风险策略</h2>
+</div>
+<div class="space-y-6">
+<div class="space-y-3">
+<div class="flex items-center justify-between">
+<span class="text-sm">Root 检测</span>
+<div class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-sm">模拟器检测</span>
+<div class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-sm">代理/VPN 拦截</span>
+<div class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+</div>
+</div>
+</div>
+<div class="pt-6 border-t border-outline-variant/30">
+<label class="text-[10px] font-bold text-slate-500 block mb-4 uppercase tracking-widest">风险处理策略</label>
+<div class="space-y-3">
+<label class="flex items-center gap-3 cursor-pointer group">
+<div class="relative flex items-center justify-center">
+<input checked="" class="w-4 h-4 border-2 border-secondary bg-transparent text-secondary focus:ring-0" name="strategy" type="radio"/>
+</div>
+<div>
+<span class="text-sm block font-medium group-hover:text-secondary transition-colors">阻断 (Blocking)</span>
+<p class="text-[10px] text-on-surface-variant">检测到风险后立即强制退出应用</p>
+</div>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<div class="relative flex items-center justify-center">
+<input class="w-4 h-4 border-2 border-outline-variant bg-transparent text-secondary focus:ring-0" name="strategy" type="radio"/>
+</div>
+<div>
+<span class="text-sm block font-medium group-hover:text-secondary transition-colors">仅记录 (Logging Only)</span>
+<p class="text-[10px] text-on-surface-variant">仅记录风险行为并发送到后端</p>
+</div>
+</label>
+</div>
+</div>
+</div>
+</section>
+<!-- Summary / Action Panel -->
+<div class="p-6 rounded-xl border border-secondary/20 bg-secondary-container/5 space-y-4">
+<div class="flex items-center justify-between text-xs text-on-surface-variant">
+<span>当前选定环境</span>
+<span class="text-secondary font-bold">ARM64-V8A</span>
+</div>
+<div class="flex items-center justify-between text-xs text-on-surface-variant">
+<span>预计加固时长</span>
+<span class="text-white">~ 4.5 Minutes</span>
+</div>
+<div class="pt-4 space-y-3">
+<button class="w-full py-4 rounded-xl font-headline font-bold text-on-primary-fixed bg-gradient-to-r from-primary to-primary-container shadow-[0_0_20px_rgba(105,156,255,0.3)] hover:scale-[1.02] active:scale-95 transition-all">
+                                启动扫描 (Launch Scan)
+                            </button>
+<button class="w-full py-3 rounded-xl font-headline font-medium text-primary bg-transparent border border-primary/20 hover:bg-primary/5 transition-all">
+                                保存草稿
+                            </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ==================== VIEW: REPORTS ==================== -->
+<section id="view-reports" class="view-section">
+<div class="pt-24 px-8 pb-12">
+<!-- Score Header Section -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+<div class="lg:col-span-2 glass-panel p-8 rounded-xl relative overflow-hidden flex items-center justify-between">
+<div class="z-10">
+<h2 class="font-headline text-4xl font-bold mb-2 tracking-tight">加固安全评级</h2>
+<p class="text-on-surface-variant max-w-md">基于静态分析、动态沙箱及代码混淆强度的综合评分。您的应用目前处于高度安全状态。</p>
+<div class="flex gap-4 mt-6">
+<div class="flex flex-col">
+<span class="text-[10px] uppercase text-slate-500 font-bold tracking-widest mb-1">扫描日期</span>
+<span class="text-sm font-mono">2023-11-24 14:20:05</span>
+</div>
+<div class="w-px h-8 bg-slate-800"></div>
+<div class="flex flex-col">
+<span class="text-[10px] uppercase text-slate-500 font-bold tracking-widest mb-1">目标架构</span>
+<div class="flex gap-1 mt-1">
+<span class="px-2 py-0.5 bg-surface-container-high rounded text-[10px] font-bold border border-outline-variant/30 text-primary">ARM64-V8A</span>
+<span class="px-2 py-0.5 bg-surface-container-high rounded text-[10px] font-bold border border-outline-variant/30 text-primary">ARMEABI-V7A</span>
+</div>
+</div>
+</div>
+</div>
+<div class="relative flex items-center justify-center w-48 h-48">
+<div class="absolute inset-0 rounded-full border-8 border-slate-800/50"></div>
+<div class="absolute inset-0 rounded-full border-8 radial-gauge opacity-80 blur-[2px]"></div>
+<div class="flex flex-col items-center justify-center z-10">
+<span class="font-headline text-6xl font-extrabold text-secondary drop-shadow-[0_0_15px_rgba(105,246,184,0.4)]">92</span>
+<span class="text-sm font-bold text-slate-400 mt-1">GRADE A</span>
+</div>
+</div>
+<!-- Abstract Glow Background -->
+<div class="absolute -right-20 -top-20 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px]"></div>
+</div>
+<div class="glass-panel p-6 rounded-xl flex flex-col justify-between border-l-4 border-tertiary">
+<div>
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-headline text-lg font-bold">运行环境信息</h3>
+<span class="material-symbols-outlined text-tertiary">info</span>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-center">
+<span class="text-sm text-on-surface-variant">Flutter 核心状态</span>
+<span class="px-3 py-1 bg-secondary-container/20 text-secondary text-[10px] font-bold rounded-full border border-secondary/30">DETECTED (3.13.0)</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-sm text-on-surface-variant">完整性校验 (Integrity)</span>
+<span class="px-3 py-1 bg-primary-container/20 text-primary text-[10px] font-bold rounded-full border border-primary/30">PINNED</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-sm text-on-surface-variant">Root/调试检测</span>
+<span class="px-3 py-1 bg-secondary-container/20 text-secondary text-[10px] font-bold rounded-full border border-secondary/30">ACTIVE</span>
+</div>
+</div>
+</div>
+<div class="mt-6 p-4 bg-surface-container-low rounded-lg flex items-center gap-3">
+<span class="material-symbols-outlined text-error" style="font-variation-settings: 'FILL' 1;">warning</span>
+<p class="text-xs text-on-surface-variant leading-relaxed">检测到 <span class="text-on-surface font-bold">2</span> 个非关键环境风险，已自动启用防御。 </p>
+</div>
+</div>
+</section>
+<!-- Main Dashboard Bento Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Recommendations List -->
+<div class="lg:col-span-4 glass-panel rounded-xl overflow-hidden flex flex-col">
+<div class="p-6 border-b border-slate-800/50 bg-slate-900/30 flex items-center justify-between">
+<h3 class="font-headline text-lg font-bold">安全建议</h3>
+<span class="px-2 py-0.5 bg-error/10 text-error text-[10px] font-bold rounded border border-error/20">3 个待处理</span>
+</div>
+<div class="flex-1 p-0">
+<div class="divide-y divide-slate-800/50">
+<div class="p-5 hover:bg-slate-800/20 transition-colors flex gap-4">
+<div class="mt-1 w-8 h-8 rounded bg-error-container/20 flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-error text-xl">gavel</span>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="text-sm font-bold">关键类 VMP 加固不足</span>
+<span class="text-[10px] px-1.5 py-0.5 bg-error text-on-error font-bold rounded">HIGH</span>
+</div>
+<p class="text-xs text-on-surface-variant leading-normal">检测到支付逻辑类仅应用了基础混淆。建议启用 VMP 虚拟化执行以对抗动态调试。</p>
+</div>
+</div>
+<div class="p-5 hover:bg-slate-800/20 transition-colors flex gap-4">
+<div class="mt-1 w-8 h-8 rounded bg-tertiary-container/20 flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-tertiary text-xl">security_update_warning</span>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="text-sm font-bold">资产文件未加密</span>
+<span class="text-[10px] px-1.5 py-0.5 bg-tertiary text-on-tertiary font-bold rounded">MEDIUM</span>
+</div>
+<p class="text-xs text-on-surface-variant leading-normal">发现 /assets/config.json 包含明文 API 密钥，请应用资产压缩加密功能。</p>
+</div>
+</div>
+<div class="p-5 hover:bg-slate-800/20 transition-colors flex gap-4">
+<div class="mt-1 w-8 h-8 rounded bg-tertiary-container/20 flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-tertiary text-xl">terminal</span>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="text-sm font-bold">JNI 方法未绑定</span>
+<span class="text-[10px] px-1.5 py-0.5 bg-tertiary text-on-tertiary font-bold rounded">MEDIUM</span>
+</div>
+<p class="text-xs text-on-surface-variant leading-normal">部分 native 方法仍使用动态注册，存在被拦截风险。建议切换至 RegisterNatives 静态绑定。</p>
+</div>
+</div>
+</div>
+</div>
+<button class="m-6 py-2 border border-outline-variant/30 rounded-lg text-sm font-medium hover:bg-slate-800/50 transition-colors">
+                    查看所有 12 条建议
+                </button>
+</div>
+<!-- Protection Stats Bar Chart -->
+<div class="lg:col-span-8 glass-panel p-8 rounded-xl flex flex-col">
+<div class="flex items-center justify-between mb-10">
+<div>
+<h3 class="font-headline text-lg font-bold">保护统计</h3>
+<p class="text-xs text-on-surface-variant mt-1">请求保护方法数 vs 实际编译成功数</p>
+</div>
+<div class="flex gap-4">
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 bg-slate-700 rounded-sm"></span>
+<span class="text-[10px] text-on-surface-variant">请求保护</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 bg-secondary rounded-sm"></span>
+<span class="text-[10px] text-on-surface-variant">成功编译</span>
+</div>
+</div>
+</div>
+<div class="flex-1 flex flex-col justify-between gap-12">
+<!-- Row: Extract -->
+<div class="space-y-3">
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
+<span>EXTRACT (函数抽取)</span>
+<span class="text-on-surface">1,248 / 1,248 (100%)</span>
+</div>
+<div class="h-6 w-full bg-surface-container-low rounded-full overflow-hidden flex">
+<div class="h-full bg-secondary" style="width: 100%"></div>
+</div>
+</div>
+<!-- Row: VMP -->
+<div class="space-y-3">
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
+<span>VMP (虚拟机保护)</span>
+<span class="text-on-surface">452 / 480 (94.1%)</span>
+</div>
+<div class="relative h-6 w-full bg-surface-container-low rounded-full overflow-hidden flex">
+<div class="h-full bg-slate-700 absolute inset-0" style="width: 100%"></div>
+<div class="h-full bg-secondary relative z-10" style="width: 94.1%"></div>
+</div>
+</div>
+<!-- Row: DEX2C -->
+<div class="space-y-3">
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
+<span>DEX2C (原生化转换)</span>
+<span class="text-on-surface">156 / 156 (100%)</span>
+</div>
+<div class="h-6 w-full bg-surface-container-low rounded-full overflow-hidden flex">
+<div class="h-full bg-secondary" style="width: 100%"></div>
+</div>
+</div>
+</div>
+<div class="mt-8 grid grid-cols-3 gap-4 border-t border-slate-800/50 pt-6">
+<div class="text-center">
+<span class="block text-2xl font-bold text-primary">0.4s</span>
+<span class="text-[10px] text-slate-500 uppercase">编译增量</span>
+</div>
+<div class="text-center border-x border-slate-800/50">
+<span class="block text-2xl font-bold text-secondary">18%</span>
+<span class="text-[10px] text-slate-500 uppercase">体积膨胀率</span>
+</div>
+<div class="text-center">
+<span class="block text-2xl font-bold text-tertiary">3.5MB</span>
+<span class="text-[10px] text-slate-500 uppercase">SO库大小</span>
+</div>
+</div>
+</div>
+<!-- Runtime Analysis Timeline -->
+<div class="lg:col-span-12 glass-panel p-8 rounded-xl">
+<div class="flex items-center justify-between mb-8">
+<h3 class="font-headline text-lg font-bold">运行时加载流水线</h3>
+<div class="flex items-center gap-2 text-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">history</span>
+<span>分析耗时: 142ms</span>
+</div>
+</div>
+<div class="relative flex items-center justify-between">
+<!-- Connecting Line -->
+<div class="absolute top-1/2 left-0 w-full h-[2px] bg-slate-800 -translate-y-1/2"></div>
+<div class="absolute top-1/2 left-0 h-[2px] bg-gradient-to-r from-secondary to-primary -translate-y-1/2" style="width: 75%"></div>
+<!-- Step 1 -->
+<div class="relative z-10 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-on-secondary shadow-[0_0_15px_rgba(105,246,184,0.3)]">
+<span class="material-symbols-outlined">rocket_launch</span>
+</div>
+<span class="mt-3 text-xs font-bold text-on-surface">Stub 加载</span>
+<span class="mt-1 text-[10px] text-secondary">PASS</span>
+</div>
+<!-- Step 2 -->
+<div class="relative z-10 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-on-secondary shadow-[0_0_15px_rgba(105,246,184,0.3)]">
+<span class="material-symbols-outlined">fingerprint</span>
+</div>
+<span class="mt-3 text-xs font-bold text-on-surface">指纹校验</span>
+<span class="mt-1 text-[10px] text-secondary">PASS</span>
+</div>
+<!-- Step 3 -->
+<div class="relative z-10 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-on-secondary shadow-[0_0_15px_rgba(105,246,184,0.3)]">
+<span class="material-symbols-outlined">encrypted</span>
+</div>
+<span class="mt-3 text-xs font-bold text-on-surface">内存解密</span>
+<span class="mt-1 text-[10px] text-secondary">PASS</span>
+</div>
+<!-- Step 4 -->
+<div class="relative z-10 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-on-primary shadow-[0_0_15px_rgba(133,173,255,0.3)]">
+<span class="material-symbols-outlined">sync_alt</span>
+</div>
+<span class="mt-3 text-xs font-bold text-on-surface">VMP 桥接</span>
+<span class="mt-1 text-[10px] text-primary">PROCESSING</span>
+</div>
+<!-- Step 5 -->
+<div class="relative z-10 flex flex-col items-center opacity-40">
+<div class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-500">
+<span class="material-symbols-outlined">check_circle</span>
+</div>
+<span class="mt-3 text-xs font-bold text-on-surface">入口移交</span>
+<span class="mt-1 text-[10px]">PENDING</span>
+</div>
+</div>
+<div class="mt-12 bg-surface-container-lowest/50 rounded-xl p-6 border border-outline-variant/20 font-mono text-sm overflow-x-auto">
+<div class="flex items-center gap-4 text-slate-500 mb-2">
+<span class="text-secondary">[SUCCESS]</span>
+<span>Verified classes.dex checksum: 0x8A2C...</span>
+</div>
+<div class="flex items-center gap-4 text-slate-500 mb-2">
+<span class="text-secondary">[SUCCESS]</span>
+<span>Hooked ArtMethod::Invoke for VMP redirection.</span>
+</div>
+<div class="flex items-center gap-4 text-primary animate-pulse mb-2">
+<span class="text-primary">[BUSY]</span>
+<span>Initializing JNI internal bridge: enko_bridge_v2.so...</span>
+</div>
+<div class="flex items-center gap-4 text-slate-500">
+<span class="text-slate-600">[WAIT]</span>
+<span>Application.onCreate waiting for protection completion.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ==================== VIEW: PROFILES ==================== -->
+<section id="view-profiles" class="view-section">
+<div class="pt-24 px-8 pb-12 relative overflow-hidden">
+<!-- Abstract Background Glows -->
+<div class="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-primary/10 blur-[120px] rounded-full -z-10"></div>
+<div class="absolute bottom-[0%] left-[10%] w-[400px] h-[400px] bg-tertiary/5 blur-[100px] rounded-full -z-10"></div>
+<div class="max-w-6xl mx-auto">
+<!-- Header Section -->
+<div class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
+<div>
+<h2 class="text-4xl md:text-5xl font-bold font-headline tracking-tighter text-on-surface mb-2">配置方案管理</h2>
+<p class="text-on-surface-variant font-body">定义并管理您的 APK 加固策略。从内置方案快速开始，或根据业务需求自定义安全参数。</p>
+</div>
+<button class="flex items-center gap-2 px-6 py-4 bg-gradient-to-br from-primary to-primary-container text-on-primary-fixed font-bold rounded-xl shadow-[0_8px_25px_rgba(105,156,255,0.4)] hover:shadow-[0_12px_35px_rgba(105,156,255,0.6)] transition-all duration-300 group">
+<span class="material-symbols-outlined">add_circle</span>
+<span>创建自定义方案</span>
+</button>
+</div>
+<!-- Built-in Section Title -->
+<div class="flex items-center gap-4 mb-8">
+<div class="h-[1px] flex-grow bg-outline-variant/30"></div>
+<span class="font-headline text-xs uppercase tracking-[0.3em] text-on-surface-variant/80">内置方案 (Built-in)</span>
+<div class="h-[1px] flex-grow bg-outline-variant/30"></div>
+</div>
+<!-- Profiles Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+<!-- Card 1: Flutter Production -->
+<div class="glass-card rounded-2xl p-6 border border-outline-variant/20 hover:border-primary/50 transition-all duration-500 group flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary text-3xl">flutter</span>
+</div>
+<span class="px-2 py-1 bg-secondary/10 text-secondary text-[10px] font-bold tracking-widest rounded uppercase">Recommended</span>
+</div>
+<h3 class="text-2xl font-bold font-headline mb-2 text-white">Flutter 生产</h3>
+<p class="text-sm text-on-surface-variant mb-6 leading-relaxed">针对 Flutter 框架优化的生产环境加固方案。平衡了启动速度与代码混淆深度。</p>
+<div class="space-y-4 mb-8">
+<div class="flex items-center justify-between">
+<span class="text-xs font-label text-on-surface-variant">目标平台</span>
+<span class="text-sm font-medium text-on-surface">ARM64-v8a / v7a</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-xs font-label text-on-surface-variant">风险策略</span>
+<span class="text-sm font-medium text-secondary">高强度加固</span>
+</div>
+<div class="flex gap-2">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center" title="Anti-Debugging">
+<span class="material-symbols-outlined text-xs text-on-surface-variant">bug_report</span>
+</div>
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center" title="Integrity Check">
+<span class="material-symbols-outlined text-xs text-on-surface-variant">verified_user</span>
+</div>
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center" title="Asset Encryption">
+<span class="material-symbols-outlined text-xs text-on-surface-variant">lock</span>
+</div>
+</div>
+</div>
+</div>
+<button class="w-full py-3 border border-outline-variant hover:bg-white/5 hover:border-white transition-all duration-300 rounded-xl flex items-center justify-center gap-2 text-sm font-medium">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+<span>复制并编辑</span>
+</button>
+</div>
+<!-- Card 2: Android Production -->
+<div class="glass-card rounded-2xl p-6 border border-outline-variant/20 hover:border-primary/50 transition-all duration-500 group flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-secondary/10 rounded-xl flex items-center justify-center border border-secondary/20">
+<span class="material-symbols-outlined text-secondary text-3xl">android</span>
+</div>
+</div>
+<h3 class="text-2xl font-bold font-headline mb-2 text-white">Android 生产</h3>
+<p class="text-sm text-on-surface-variant mb-6 leading-relaxed">通用 Android 应用生产环境加固。包括 DEX 虚拟化和全面的反调试保护。</p>
+<div class="space-y-4 mb-8">
+<div class="flex items-center justify-between">
+<span class="text-xs font-label text-on-surface-variant">目标平台</span>
+<span class="text-sm font-medium text-on-surface">Multi-Platform</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-xs font-label text-on-surface-variant">风险策略</span>
+<span class="text-sm font-medium text-secondary">极致安全</span>
+</div>
+<div class="flex gap-2">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center" title="DEX Virtualization">
+<span class="material-symbols-outlined text-xs text-on-surface-variant">terminal</span>
+</div>
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center" title="Hook Protection">
+<span class="material-symbols-outlined text-xs text-on-surface-variant">security_update_good</span>
+</div>
+</div>
+</div>
+</div>
+<button class="w-full py-3 border border-outline-variant hover:bg-white/5 hover:border-white transition-all duration-300 rounded-xl flex items-center justify-center gap-2 text-sm font-medium">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+<span>复制并编辑</span>
+</button>
+</div>
+<!-- Card 3: Lab Debug -->
+<div class="glass-card rounded-2xl p-6 border border-outline-variant/20 hover:border-tertiary/50 transition-all duration-500 group flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-tertiary/10 rounded-xl flex items-center justify-center border border-tertiary/20">
+<span class="material-symbols-outlined text-tertiary text-3xl">biotech</span>
+</div>
+</div>
+<h3 class="text-2xl font-bold font-headline mb-2 text-white">实验室调试</h3>
+<p class="text-sm text-on-surface-variant mb-6 leading-relaxed">轻量级安全检查，允许调试器挂载。适用于内部测试和灰度环境。</p>
+<div class="space-y-4 mb-8">
+<div class="flex items-center justify-between">
+<span class="text-xs font-label text-on-surface-variant">目标平台</span>
+<span class="text-sm font-medium text-on-surface">Development</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-xs font-label text-on-surface-variant">风险策略</span>
+<span class="text-sm font-medium text-tertiary">宽松模式</span>
+</div>
+<div class="flex gap-2">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center" title="Lightweight Obfuscation">
+<span class="material-symbols-outlined text-xs text-on-surface-variant">blur_on</span>
+</div>
+</div>
+</div>
+</div>
+<button class="w-full py-3 border border-outline-variant hover:bg-white/5 hover:border-white transition-all duration-300 rounded-xl flex items-center justify-center gap-2 text-sm font-medium">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+<span>复制并编辑</span>
+</button>
+</div>
+</div>
+<!-- Bottom Section Meta Information -->
+<div class="mt-16 grid grid-cols-1 lg:grid-cols-2 gap-8 items-center bg-surface-container-low p-8 rounded-3xl border border-outline-variant/10">
+<div class="flex gap-6 items-center">
+<div class="w-16 h-16 rounded-full bg-tertiary/10 flex items-center justify-center animate-pulse shadow-[0_0_20px_rgba(172,138,255,0.2)]">
+<span class="material-symbols-outlined text-tertiary text-3xl">auto_fix_high</span>
+</div>
+<div>
+<h4 class="text-lg font-bold text-white mb-1">正在自动生成智能建议...</h4>
+<p class="text-sm text-on-surface-variant">基于您最近 10 次的扫描分析，系统建议针对 Flutter 应用开启 Native 代码混淆。</p>
+</div>
+</div>
+<div class="flex justify-end gap-3">
+<div class="px-4 py-2 bg-surface-container rounded-lg border border-outline-variant/30 text-xs font-medium text-on-surface-variant">
+                        最近更新: 2023.10.24 14:30
+                    </div>
+<div class="px-4 py-2 bg-surface-container rounded-lg border border-outline-variant/30 text-xs font-medium text-on-surface-variant">
+                        总计方案: 12
+                    </div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+</main>
+
+<!-- FAB Action Button -->
+<button class="fixed bottom-8 right-8 w-14 h-14 bg-gradient-to-br from-primary to-primary-container rounded-full flex items-center justify-center text-on-primary-fixed shadow-2xl shadow-primary/40 hover:scale-110 active:scale-95 transition-all z-50">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1;">add</span>
+</button>
+
+<script src="js/utils.js"></script>
+<script src="js/api.js"></script>
+<script src="js/analyzer.js"></script>
+<script src="app.js"></script>
+</body></html>

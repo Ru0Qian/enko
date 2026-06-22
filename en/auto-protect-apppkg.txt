@@ -1,0 +1,9 @@
+# Auto-generated protection map
+# include-packages: com.saaskami.mobile_admin
+# level: 0=none, 1=extract, 2=vmp, 3=dex2c
+
+# Phase 4.1 Extract
+
+# Phase 4.3 VMP DEX
+
+# Phase 4.2 DEX2C

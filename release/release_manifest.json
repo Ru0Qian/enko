@@ -1,0 +1,31 @@
+{
+  "engine_version": "1.0.0",
+  "rules_version": "2026.03.06.1",
+  "policy_version": "2026.03.06.1",
+  "map_version": "full-open.v1",
+  "config_schema_version": "1",
+  "generated_at_utc": "2026-05-04T17:26:59Z",
+  "files": {
+    "engine_manifest": {
+      "path": "engine_manifest.json",
+      "sha256": "5FC3BAB01704404F67C4800C869955F92F5C794AC478AF957B4B9B6AF54BC479"
+    },
+    "rules": {
+      "path": "rules.json",
+      "sha256": "90BFA92336E4E2127539D37D79A0CE170DB1DDF3C1D58D566207AD006E740B6D"
+    },
+    "policy": {
+      "path": "policy.json",
+      "sha256": "6A9509526687258AFC1D40BF4F319B3F23A9240E52FA44412201108451F344F7"
+    },
+    "protection_map": {
+      "path": "../full-open-protect.txt",
+      "sha256": "39B15F822D8E36C6896304113E82F07FB2F85173FCC37E814622F43B05AAC7E9"
+    },
+    "presets": {
+      "path": "presets.json",
+      "sha256": "915A50F9838C28E2539C42B8C5DA9FF8A17E8CE318312A730E2B674163A80578"
+    }
+  },
+  "preset_version": "2026.03.06.1"
+}

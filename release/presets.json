@@ -1,0 +1,15 @@
+{
+  "preset_version": "2026.03.06.1",
+  "presets": {
+    "free": {
+      "risk_policy": "log",
+      "risk_profile": "balanced",
+      "commercial_mode": false
+    },
+    "paid": {
+      "risk_policy": "block",
+      "risk_profile": "strict",
+      "commercial_mode": true
+    }
+  }
+}

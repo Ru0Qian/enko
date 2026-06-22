@@ -1,0 +1,62 @@
+# IDE
+.idea/
+
+# Gradle
+.gradle/
+build/
+local.properties
+
+# Android native build (CMake) intermediates — matches any depth
+.cxx/
+**/.cxx/
+
+# Gradle caches at any depth (project trees may have nested .gradle/)
+**/.gradle/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Android keystore (sensitive)
+*.jks
+
+# Secrets / environment files (never commit real values; commit *.example instead)
+*.env
+deploy/config.env
+!*.env.example
+
+# APK binaries & signatures
+*.apk
+*.apk.idsig
+*.idsig
+
+# Build reports (generated)
+*.report.json
+
+# Temp / log files
+_stitch_tmp/
+_tmp_*.py
+_tmp_device_base.apk
+_crash_window.log
+_window_dump.xml
+screen*.png
+output/
+.playwright-mcp/
+
+# Large tool binaries (download separately)
+tools/gradle-8.2.1/
+tools/gradle-8.2.1-bin.zip
+tools/apktool_3.0.1.jar
+.tools/
+
+# Web console temp
+web-console/.job-cache/
+web-console/_stitch_extract/
+web-console/_stitch_preview/
+web-console/_stitch_ref/
+web-console/stitch*.zip
+web-console/*.bak

@@ -1,0 +1,32 @@
+# High-adversary protection map for demo-app
+# Format: <method_spec> <level>
+# level: 0=none, 1=extract, 2=vmp, 3=dex2c
+
+# ----------------------------
+# Phase 4.1 Extract
+# Keep UI/flow methods in extracted form to reduce static readability.
+# ----------------------------
+Lcom/example/demo/MainActivity;->onCreate(Landroid/os/Bundle;)V 1
+Lcom/example/demo/MainActivity;->runCryptoTest()V 1
+Lcom/example/demo/MainActivity;->appendInfo(Ljava/lang/String;)V 1
+Lcom/example/demo/MainActivity;->updateStatus()V 1
+Lcom/example/demo/DemoApplication;->onCreate()V 1
+
+# ----------------------------
+# Phase 4.3 VMP DEX
+# Cover crypto, premium, and license decision chain.
+# ----------------------------
+Lcom/example/demo/CryptoHelper;->encrypt(Ljava/lang/String;)Ljava/lang/String; 2
+Lcom/example/demo/CryptoHelper;->decrypt(Ljava/lang/String;)Ljava/lang/String; 2
+Lcom/example/demo/CryptoHelper;->hexToBytes(Ljava/lang/String;)[B 2
+
+Lcom/example/demo/LicenseManager;->validateLicense(Ljava/lang/String;)Z 2
+Lcom/example/demo/LicenseManager;->activate(Ljava/lang/String;)V 2
+Lcom/example/demo/LicenseManager;->getStatusText()Ljava/lang/String; 2
+Lcom/example/demo/LicenseManager;->loadState()V 2
+
+# ----------------------------
+# Phase 4.2 DEX2C
+# Keep narrow for stability: boolean gate method.
+# ----------------------------
+Lcom/example/demo/LicenseManager;->isActivated()Z 3

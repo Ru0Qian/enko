@@ -1,0 +1,88 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.enko.test.scenario"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.enko.test.scenario"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        ndk {
+            abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+        }
+
+        externalNativeBuild {
+            cmake {
+                cFlags "-DNDEBUG"
+            }
+        }
+    }
+
+    flavorDimensions "scenario"
+    productFlavors {
+        javaBasic {
+            dimension "scenario"
+            applicationId "com.enko.test.scenario.javabasic"
+            buildConfigField "String", "SCENARIO_KIND", "\"java-basic\""
+            resValue "string", "scenario_name", "Java Basic"
+        }
+        reflection {
+            dimension "scenario"
+            applicationId "com.enko.test.scenario.reflection"
+            buildConfigField "String", "SCENARIO_KIND", "\"reflection\""
+            resValue "string", "scenario_name", "Reflection"
+        }
+        nativeJni {
+            dimension "scenario"
+            applicationId "com.enko.test.scenario.nativejni"
+            buildConfigField "String", "SCENARIO_KIND", "\"native-jni\""
+            resValue "string", "scenario_name", "Native JNI"
+        }
+        resourceState {
+            dimension "scenario"
+            applicationId "com.enko.test.scenario.resstate"
+            buildConfigField "String", "SCENARIO_KIND", "\"resource-state\""
+            resValue "string", "scenario_name", "Resource State"
+        }
+        complexBusiness {
+            dimension "scenario"
+            applicationId "com.enko.test.scenario.business"
+            buildConfigField "String", "SCENARIO_KIND", "\"complex-business\""
+            resValue "string", "scenario_name", "Complex Business"
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+}

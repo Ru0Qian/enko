@@ -1,0 +1,21 @@
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+exclude = ["web-console/server_prod.py"]
+
+[tool.bandit]
+skips = ["B101", "B311"]
+exclude_dirs = ["web-console"]
+
+[tool.black]
+line-length = 120
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v"

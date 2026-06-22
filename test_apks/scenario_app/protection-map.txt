@@ -1,0 +1,44 @@
+# level: 0=none, 1=extract, 2=vmp, 3=dex2c
+# Shared UI/orchestration path.
+Lcom/enko/test/scenario/FlagGateway;->verify(Landroid/content/Context;Ljava/lang/String;)Z 2
+Lcom/enko/test/scenario/MainActivity;->verifySubmittedFlag(Ljava/lang/String;)Z 1
+
+# Pure Java crypto/string path.
+Lcom/enko/test/scenario/JavaBasicVerifier;->verify(Ljava/lang/String;)Z 2
+Lcom/enko/test/scenario/JavaBasicVerifier;->recoverFlag()Ljava/lang/String; 2
+Lcom/enko/test/scenario/JavaBasicVerifier;->constantTimeSha256([B[B)Z 3
+
+# Reflection-heavy path.
+Lcom/enko/test/scenario/ReflectionVerifier;->verify(Ljava/lang/String;)Z 2
+Lcom/enko/test/scenario/ReflectiveSecret;->recover()Ljava/lang/String; 2
+Lcom/enko/test/scenario/ReflectiveSecret;->check(Ljava/lang/String;)Z 2
+
+# JNI wrapper path. The native method itself stays native business code.
+Lcom/enko/test/scenario/NativeScenarioVerifier;->verify(Ljava/lang/String;)Z 2
+
+# Resource and persisted-state path.
+Lcom/enko/test/scenario/ResourceScenarioVerifier;->verify(Ljava/lang/String;)Z 2
+Lcom/enko/test/scenario/ResourceScenarioVerifier;->recoverFromResources()Ljava/lang/String; 1
+Lcom/enko/test/scenario/ResourceScenarioVerifier;->stableDigest(Ljava/lang/String;)Ljava/lang/String; 3
+
+# Complex business path.
+Lcom/enko/test/scenario/ComplexBusinessVerifier;->verify(Ljava/lang/String;)Z 2
+Lcom/enko/test/scenario/ComplexBusinessVerifier;->recoverFlag()Ljava/lang/String; 2
+Lcom/enko/test/scenario/ComplexBusinessVerifier;->constantTimeEquals(Ljava/lang/String;Ljava/lang/String;)Z 2
+Lcom/enko/test/scenario/ComplexBusinessVerifier;->nativeScoreReference(Ljava/lang/String;ILjava/lang/String;)I 3
+Lcom/enko/test/scenario/BusinessTrigger;->prepare(Landroid/content/Context;)Lcom/enko/test/scenario/BusinessTrigger$Result; 2
+Lcom/enko/test/scenario/BusinessTrigger;->consume(Landroid/content/Context;)Z 2
+Lcom/enko/test/scenario/BusinessTrigger;->buildSnapshot(Landroid/content/Context;)Lcom/enko/test/scenario/BusinessTrigger$Snapshot; 1
+Lcom/enko/test/scenario/BusinessTrigger;->buildProof(Landroid/content/Context;Lcom/enko/test/scenario/BusinessTrigger$Snapshot;J)Ljava/lang/String; 3
+Lcom/enko/test/scenario/BusinessTrigger;->constantTimeEquals(Ljava/lang/String;Ljava/lang/String;)Z 3
+Lcom/enko/test/scenario/BusinessSession;->issueToken(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; 2
+Lcom/enko/test/scenario/BusinessSession;->isFresh(Ljava/lang/String;)Z 2
+Lcom/enko/test/scenario/BusinessSession;->sha256(Ljava/lang/String;)Ljava/lang/String; 3
+Lcom/enko/test/scenario/InventoryDatabase;->buildOrder()Lcom/enko/test/scenario/BusinessOrder; 1
+Lcom/enko/test/scenario/PricingEngine;->quote(Lcom/enko/test/scenario/BusinessOrder;)Lcom/enko/test/scenario/PricingEngine$Quote; 2
+Lcom/enko/test/scenario/PricingEngine;->stabilityCode(Lcom/enko/test/scenario/PricingEngine$Quote;)I 2
+Lcom/enko/test/scenario/ResourceLicense;->readLicense(Landroid/content/Context;)Ljava/lang/String; 1
+Lcom/enko/test/scenario/ResourceLicense;->verifyLicense(Ljava/lang/String;)Z 2
+Lcom/enko/test/scenario/BusinessReflectionGate;->accept(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Z 2
+Lcom/enko/test/scenario/HiddenBusinessRules;->accept(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Z 2
+Lcom/enko/test/scenario/HiddenBusinessRules;->stableHash(Ljava/lang/String;)I 3

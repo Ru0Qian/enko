@@ -1,0 +1,818 @@
+<section id="view-new-job" class="view-section">
+<div class="pt-24 px-4 md:px-8 pb-12 max-w-7xl mx-auto">
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- Row 1: Upload APK (large, left) + Profile Cards (right)    -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+
+  <!-- APK Upload Zone — spans 2 of 3 columns -->
+  <div class="lg:col-span-2 glass-panel p-6 md:p-8 rounded-xl border border-outline-variant/20 shadow-xl">
+    <div class="flex items-center gap-3 mb-6">
+      <div class="p-2.5 bg-primary/10 rounded-xl">
+        <span class="material-symbols-outlined text-primary text-2xl">cloud_upload</span>
+      </div>
+      <div>
+        <h2 class="text-xl font-headline font-bold text-white tracking-tight">上传 APK</h2>
+        <p class="text-xs text-on-surface-variant">拖拽或点击选择文件，最大 512MB</p>
+      </div>
+    </div>
+    <div id="apkDropZone" class="relative border-2 border-dashed border-outline-variant/40 hover:border-primary/60 rounded-xl p-8 md:p-12 text-center transition-all duration-300 cursor-pointer group bg-surface-container-low/50 hover:bg-primary/5">
+      <input id="apkFileInput" type="file" accept=".apk" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" aria-label="选择 APK 文件"/>
+      <div id="apkUploadPrompt" class="space-y-4">
+        <div class="w-20 h-20 mx-auto bg-primary/10 rounded-2xl flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+          <span class="material-symbols-outlined text-4xl text-primary">cloud_upload</span>
+        </div>
+        <div>
+          <p class="text-base font-medium text-on-surface">拖拽 APK 文件到此处，或<span class="text-primary font-bold">点击选择</span></p>
+          <p class="text-xs text-on-surface-variant mt-1">支持 .apk 格式，最大 512MB</p>
+        </div>
+      </div>
+      <div id="apkUploadStatus" class="hidden space-y-3">
+        <div class="w-20 h-20 mx-auto bg-secondary/10 rounded-2xl flex items-center justify-center">
+          <span class="material-symbols-outlined text-4xl text-secondary">check_circle</span>
+        </div>
+        <p id="apkFileName" class="text-base font-medium text-secondary">已上传</p>
+        <p id="apkFileSize" class="text-xs text-on-surface-variant"></p>
+        <button id="apkReupload" type="button" class="text-xs text-primary hover:underline mt-2">重新选择</button>
+      </div>
+      <div id="apkUploading" class="hidden space-y-4">
+        <div class="w-20 h-20 mx-auto bg-primary/10 rounded-2xl flex items-center justify-center animate-pulse">
+          <span class="material-symbols-outlined text-4xl text-primary">hourglass_top</span>
+        </div>
+        <p id="apkUploadLabel" class="text-base font-medium text-on-surface">正在上传...</p>
+        <div class="w-full max-w-sm mx-auto">
+          <div class="h-2.5 bg-surface-container rounded-full overflow-hidden">
+            <div id="apkUploadBar" class="h-full bg-primary rounded-full transition-all duration-300" style="width:0%"></div>
+          </div>
+          <p id="apkUploadPercent" class="text-xs text-on-surface-variant mt-2">0%</p>
+        </div>
+      </div>
+    </div>
+    <input id="inputApk" type="hidden" value=""/>
+  </div>
+
+  <!-- Profile Cards — 1 column -->
+  <div class="glass-panel p-6 rounded-xl border border-outline-variant/20 shadow-xl">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="p-2 bg-secondary/10 rounded-lg">
+        <span class="material-symbols-outlined text-secondary">dashboard_customize</span>
+      </div>
+      <div>
+        <h2 class="text-lg font-headline font-bold text-white">配置方案</h2>
+        <p class="text-[11px] text-on-surface-variant">一键应用预设策略</p>
+      </div>
+    </div>
+    <div id="profileCards" class="grid grid-cols-1 gap-3">
+      <button type="button" data-profile-card="flutter_prod" class="profile-card group relative flex flex-col items-start gap-2 p-4 rounded-xl border-2 border-outline-variant/30 bg-surface-container-low/50 hover:bg-primary/5 hover:border-primary/40 transition-all duration-300 text-left">
+        <div class="flex items-center gap-2 w-full">
+          <div class="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-blue-400" style="font-size:18px">flutter</span>
+          </div>
+          <span class="text-sm font-bold text-on-surface truncate">Flutter 生产</span>
+          <span class="ml-auto px-1.5 py-0.5 text-[10px] font-bold rounded bg-green-500/15 text-green-400 uppercase tracking-wider shrink-0">高优化</span>
+        </div>
+        <p class="text-[11px] text-on-surface-variant leading-snug">全保护 + 严格策略，适合上架发布</p>
+        <div class="absolute inset-0 rounded-xl ring-2 ring-primary opacity-0 pointer-events-none transition-opacity profile-card-ring"></div>
+      </button>
+      <button type="button" data-profile-card="android_prod" class="profile-card group relative flex flex-col items-start gap-2 p-4 rounded-xl border-2 border-outline-variant/30 bg-surface-container-low/50 hover:bg-primary/5 hover:border-primary/40 transition-all duration-300 text-left">
+        <div class="flex items-center gap-2 w-full">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-emerald-400" style="font-size:18px">android</span>
+          </div>
+          <span class="text-sm font-bold text-on-surface truncate">Android 生产</span>
+          <span class="ml-auto px-1.5 py-0.5 text-[10px] font-bold rounded bg-blue-500/15 text-blue-400 uppercase tracking-wider shrink-0">默认</span>
+        </div>
+        <p class="text-[11px] text-on-surface-variant leading-snug">标准加固策略，通用 Android 应用</p>
+        <div class="absolute inset-0 rounded-xl ring-2 ring-primary opacity-0 pointer-events-none transition-opacity profile-card-ring"></div>
+      </button>
+      <button type="button" data-profile-card="lab_debug" class="profile-card group relative flex flex-col items-start gap-2 p-4 rounded-xl border-2 border-outline-variant/30 bg-surface-container-low/50 hover:bg-primary/5 hover:border-primary/40 transition-all duration-300 text-left">
+        <div class="flex items-center gap-2 w-full">
+          <div class="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-amber-400" style="font-size:18px">science</span>
+          </div>
+          <span class="text-sm font-bold text-on-surface truncate">实验室调试</span>
+          <span class="ml-auto px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-500/15 text-amber-400 uppercase tracking-wider shrink-0">宽松</span>
+        </div>
+        <p class="text-[11px] text-on-surface-variant leading-snug">最低保护，仅用于开发测试验证</p>
+        <div class="absolute inset-0 rounded-xl ring-2 ring-primary opacity-0 pointer-events-none transition-opacity profile-card-ring"></div>
+      </button>
+    </div>
+    <div class="mt-4 grid grid-cols-2 gap-2 border-t border-outline-variant/20 pt-4">
+      <button type="button" data-quick-preset="compat" class="px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/20 text-xs text-on-surface-variant hover:text-on-surface hover:border-secondary/40 transition-colors">
+        兼容推荐
+      </button>
+      <button type="button" data-quick-preset="strong" class="px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/20 text-xs text-on-surface-variant hover:text-on-surface hover:border-primary/40 transition-colors">
+        强保护
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- Row 2: Method Protection  (default open)                   -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<details class="group glass-panel rounded-xl border border-outline-variant/20 shadow-xl mb-6" open>
+  <summary class="flex items-center gap-3 p-5 md:p-6 cursor-pointer list-none select-none hover:bg-surface-container-low/20 rounded-xl transition-colors">
+    <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-90 transition-transform duration-200 shrink-0">chevron_right</span>
+    <div class="p-2 bg-tertiary/10 rounded-lg shrink-0">
+      <span class="material-symbols-outlined text-tertiary">terminal</span>
+    </div>
+    <div class="flex-1 min-w-0">
+      <h2 class="text-lg font-headline font-bold text-white">方法保护</h2>
+      <p class="text-xs text-on-surface-variant">细粒度字节码处理策略</p>
+    </div>
+    <button id="analyzeMethodsBtn" class="btn-lift flex items-center gap-2 px-4 py-2 bg-tertiary/10 border border-tertiary/30 rounded-lg text-sm text-tertiary font-medium hover:bg-tertiary/20 transition-all shrink-0" disabled title="上传 APK 后可用 — 自动扫描方法并推荐保护策略" onclick="event.stopPropagation()">
+      <span class="material-symbols-outlined icon-sm">auto_fix_high</span>
+      <span>智能分析</span>
+    </button>
+  </summary>
+  <div class="px-5 md:px-6 pb-6 space-y-5">
+
+    <!-- Protection Feature Cards -->
+    <div id="featureCardsSection" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <label class="feature-card group relative flex flex-col gap-2 p-4 bg-surface-container rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-secondary/40 transition-all duration-200">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-secondary" style="font-size:20px">call_split</span>
+            <span class="text-sm font-bold text-on-surface">方法抽取</span>
+          </div>
+          <input id="featureExtract" checked="" type="checkbox"/>
+        </div>
+        <p class="text-[11px] text-on-surface-variant leading-relaxed">将关键方法从 DEX 中抽离，运行时动态还原，防止静态分析</p>
+        <span class="text-[10px] font-bold text-secondary/60 uppercase tracking-wider">Extract</span>
+      </label>
+      <label class="feature-card group relative flex flex-col gap-2 p-4 bg-surface-container rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-primary/40 transition-all duration-200">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary" style="font-size:20px">memory</span>
+            <span class="text-sm font-bold text-on-surface">VMP 保护</span>
+          </div>
+          <input id="featureVmpDex" type="checkbox"/>
+        </div>
+        <p class="text-[11px] text-on-surface-variant leading-relaxed">将字节码编译为自定义虚拟机指令，极大提高逆向难度</p>
+        <span class="text-[10px] font-bold text-primary/60 uppercase tracking-wider">Virtual Machine</span>
+      </label>
+      <label class="feature-card group relative flex flex-col gap-2 p-4 bg-surface-container rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-tertiary/40 transition-all duration-200">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-tertiary" style="font-size:20px">code</span>
+            <span class="text-sm font-bold text-on-surface">DEX2C</span>
+          </div>
+          <input id="featureDex2c" checked="" type="checkbox"/>
+        </div>
+        <p class="text-[11px] text-on-surface-variant leading-relaxed">将 Java 方法编译为原生 C 代码（需要 NDK），最高强度保护</p>
+        <span class="text-[10px] font-bold text-tertiary/60 uppercase tracking-wider">Native Compile</span>
+      </label>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-3">
+      <div class="p-4 bg-surface-container-low rounded-xl border border-outline-variant/20">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary" style="font-size:18px">shuffle</span>
+            <span class="text-sm font-bold text-on-surface">VMP 混淆</span>
+          </div>
+          <select id="vmpObfuscationPreset" class="bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-1.5 text-xs text-on-surface focus:ring-1 focus:ring-primary">
+            <option value="light" selected>Light</option>
+            <option value="medium">Medium</option>
+            <option value="stable">Stable</option>
+          </select>
+        </div>
+        <p class="text-[11px] text-on-surface-variant leading-relaxed">控制 VMP 指令拆分、垃圾块和内联干扰强度，Light 为默认兼容档。</p>
+      </div>
+
+      <div class="p-4 bg-surface-container-low rounded-xl border border-outline-variant/20">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary" style="font-size:18px">account_tree</span>
+            <span class="text-sm font-bold text-on-surface">VM 档位</span>
+          </div>
+          <select id="vmpVmTier" class="bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-1.5 text-xs text-on-surface focus:ring-1 focus:ring-primary">
+            <option value="auto" selected>Auto</option>
+            <option value="compat">Compat</option>
+            <option value="light">Light</option>
+            <option value="strong">Strong</option>
+          </select>
+        </div>
+        <p class="text-[11px] text-on-surface-variant leading-relaxed">选择 VMP 运行时核心分区，Auto 会根据兼容/强保护策略自动落到对应档位。</p>
+      </div>
+
+      <label class="p-4 bg-surface-container-low rounded-xl border border-outline-variant/20 flex items-start gap-4 cursor-pointer hover:bg-surface-bright hover:border-secondary/40 transition-all duration-200">
+        <div class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+          <input id="extractOnDemand" type="checkbox" class="sr-only peer" checked/>
+          <div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+        </div>
+        <div class="min-w-0 flex-1">
+          <strong class="text-sm text-on-surface block mb-1">抽取按需恢复</strong>
+          <span class="text-[11px] text-on-surface-variant leading-relaxed">类加载前只恢复当前类方法，兼容档可切回批量恢复。</span>
+        </div>
+      </label>
+
+      <div class="p-4 bg-surface-container-low rounded-xl border border-outline-variant/20 space-y-3">
+        <div class="flex items-start gap-4">
+          <div class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+            <input id="dex2cOllvm" type="checkbox" class="sr-only peer" checked/>
+            <div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+          </div>
+          <div class="min-w-0 flex-1">
+            <strong class="text-sm text-on-surface block mb-1">DEX2C OLLVM</strong>
+            <span class="text-[11px] text-on-surface-variant leading-relaxed">对 libagpjnix.so 启用 Hikari/OLLVM，默认 best-effort，工具链不可用时回退 NDK。</span>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+          <input id="dex2cOllvmClang" class="bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 text-xs text-on-surface placeholder:text-slate-600 focus:ring-1 focus:ring-primary" placeholder="D:/Env/tool/hikari-llvm19/install/bin/clang.exe"/>
+          <label class="inline-flex items-center gap-2 px-3 py-2 bg-surface-container border border-outline-variant/20 rounded-lg text-xs text-on-surface-variant cursor-pointer">
+            <input id="dex2cOllvmRequired" type="checkbox" class="rounded"/>
+            必须成功
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Analyze Status -->
+    <div id="methodAnalyzeStatus" class="hidden">
+      <div class="flex items-center gap-3 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20">
+        <div class="animate-pulse"><span class="material-symbols-outlined text-tertiary">hourglass_top</span></div>
+        <span class="text-sm text-on-surface-variant">正在分析 APK 方法结构...</span>
+      </div>
+    </div>
+
+    <!-- Summary Bar (shown after analysis) -->
+    <div id="methodSummaryBar" class="hidden">
+      <div class="flex flex-wrap items-center gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20">
+        <div class="flex items-center gap-2 flex-1">
+          <span class="material-symbols-outlined text-tertiary icon-sm">analytics</span>
+          <span class="text-xs text-on-surface-variant">扫描 <strong id="methodTotalCount" class="text-on-surface">0</strong> 个方法</span>
+        </div>
+        <div class="flex items-center gap-3 text-xs">
+          <span class="px-2 py-1 bg-secondary/10 text-secondary rounded font-bold"><span id="methodExtractCount">0</span> 抽取</span>
+          <span class="px-2 py-1 bg-primary/10 text-primary rounded font-bold"><span id="methodVmpCount">0</span> VMP</span>
+          <span class="px-2 py-1 bg-tertiary/10 text-tertiary rounded font-bold"><span id="methodDex2cCount">0</span> DEX2C</span>
+          <span class="px-2 py-1 bg-surface-container text-on-surface-variant rounded font-bold"><span id="methodSelectedCount">0</span> 已选</span>
+        </div>
+        <select id="methodSmartPreset" class="bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-1.5 text-xs text-on-surface">
+          <option value="compat">兼容优先</option>
+          <option value="balanced" selected>均衡推荐</option>
+          <option value="strong">强保护</option>
+          <option value="extreme">极限保护</option>
+        </select>
+        <button id="toggleMethodMode" class="hidden flex items-center gap-1 px-3 py-1.5 bg-primary/10 border border-primary/30 rounded-lg text-xs text-primary font-bold hover:bg-primary/20 transition-all">
+          <span class="material-symbols-outlined icon-xs">tune</span> <span id="methodModeLabel">高级模式</span>
+        </button>
+        <button id="acceptRecommended" class="flex items-center gap-1 px-3 py-1.5 bg-secondary/10 border border-secondary/30 rounded-lg text-xs text-secondary font-bold hover:bg-secondary/20 transition-all">
+          <span class="material-symbols-outlined icon-xs">check</span> 接受推荐
+        </button>
+      </div>
+    </div>
+
+    <!-- Method Table (Recommended) -->
+    <div id="methodRecommendedPanel" class="hidden">
+      <div class="bg-surface-container-low rounded-xl overflow-hidden border border-outline-variant/20 max-h-80 overflow-y-auto">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead class="sticky top-0 z-10">
+            <tr class="bg-surface-container-high">
+              <th scope="col" class="px-4 py-3 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold w-8">
+                <input type="checkbox" id="methodSelectAll" checked class="rounded"/>
+              </th>
+              <th scope="col" class="px-4 py-3 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">方法</th>
+              <th scope="col" class="px-4 py-3 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold w-20">大小</th>
+              <th scope="col" class="px-4 py-3 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold w-16">评分</th>
+              <th scope="col" class="px-4 py-3 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold w-28">保护级别</th>
+            </tr>
+          </thead>
+          <tbody id="methodTableBody" class="divide-y divide-slate-800/30"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Method Table (Advanced) -->
+    <div id="methodAdvancedPanel" class="hidden">
+      <div class="mb-3 flex flex-wrap items-center gap-3">
+        <div class="relative flex-1">
+          <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 icon-sm">search</span>
+          <input id="methodSearchInput" type="text" class="w-full bg-surface-container border border-outline-variant/30 rounded-lg pl-9 pr-4 py-2 text-xs text-on-surface placeholder:text-slate-600" placeholder="搜索类名或方法名..."/>
+        </div>
+        <select id="methodPackageFilter" class="bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 text-xs text-on-surface">
+          <option value="">全部包</option>
+        </select>
+        <label class="inline-flex items-center gap-2 px-3 py-2 bg-surface-container border border-outline-variant/20 rounded-lg text-xs text-on-surface-variant cursor-pointer">
+          <input id="methodOnlySelected" type="checkbox" class="rounded"/>
+          只看已选
+        </label>
+        <button id="smartSelectFiltered" class="flex items-center gap-1 px-3 py-2 bg-primary/10 border border-primary/30 rounded-lg text-xs text-primary font-bold hover:bg-primary/20 transition-all">
+          <span class="material-symbols-outlined icon-xs">auto_awesome</span> 智能选取当前结果
+        </button>
+        <button id="clearFilteredSelection" class="flex items-center gap-1 px-3 py-2 bg-surface-container border border-outline-variant/30 rounded-lg text-xs text-on-surface-variant hover:bg-surface-bright transition-all">
+          <span class="material-symbols-outlined icon-xs">backspace</span> 清空当前结果
+        </button>
+      </div>
+      <div class="bg-surface-container-low rounded-xl overflow-hidden border border-outline-variant/20 max-h-96 overflow-y-auto">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead class="sticky top-0 z-10">
+            <tr class="bg-surface-container-high">
+              <th scope="col" class="px-4 py-3 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold w-8"></th>
+              <th scope="col" class="px-4 py-3 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold">方法</th>
+              <th scope="col" class="px-4 py-3 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold w-20">大小</th>
+              <th scope="col" class="px-4 py-3 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold w-24">智能评分</th>
+              <th scope="col" class="px-4 py-3 text-[10px] uppercase tracking-widest text-slate-500 font-headline font-bold w-28">保护级别</th>
+            </tr>
+          </thead>
+          <tbody id="methodAdvancedBody" class="divide-y divide-slate-800/30"></tbody>
+        </table>
+      </div>
+      <p id="methodAdvancedCount" class="text-[10px] text-slate-500 mt-2 text-right">显示 0 / 0 个方法</p>
+    </div>
+
+    <!-- Fallback: No analysis yet -->
+    <div id="methodEmptyState" class="empty-state empty-state-enhanced">
+      <span class="material-symbols-outlined empty-state-float">auto_fix_high</span>
+      <p class="text-sm font-medium text-on-surface mb-1">上传 APK 后点击"智能分析"</p>
+      <p class="text-xs">自动识别可保护方法并推荐最佳保护策略</p>
+    </div>
+  </div>
+</details>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- Row 3: Shell Protection  (default collapsed)               -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<details class="group glass-panel rounded-xl border border-outline-variant/20 shadow-xl mb-6">
+  <summary class="flex items-center gap-3 p-5 md:p-6 cursor-pointer list-none select-none hover:bg-surface-container-low/20 rounded-xl transition-colors">
+    <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-90 transition-transform duration-200 shrink-0">chevron_right</span>
+    <div class="p-2 bg-primary/10 rounded-lg shrink-0">
+      <span class="material-symbols-outlined text-primary">deployed_code</span>
+    </div>
+    <div class="flex-1 min-w-0">
+      <h2 class="text-lg font-headline font-bold text-white">壳保护</h2>
+      <p class="text-xs text-on-surface-variant">DEX 整体加固与多态外壳</p>
+    </div>
+    <span class="text-[10px] text-slate-600 shrink-0 hidden sm:inline">2 个选项</span>
+  </summary>
+  <div class="px-5 md:px-6 pb-6">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <!-- VMP Shell DEX -->
+      <label class="flex items-start gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-primary/40 transition-all duration-200">
+        <div class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+          <input id="featureVmpShellDex" type="checkbox" class="sr-only peer"/>
+          <div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+        </div>
+        <div>
+          <strong class="text-sm text-on-surface block mb-1">VMP 壳自保护</strong>
+          <span class="text-[11px] text-on-surface-variant leading-relaxed">对整个 DEX 文件进行虚拟机壳保护，启动时先经过壳自校验，防止 DEX 篡改与静态 dump</span>
+        </div>
+      </label>
+      <!-- Polymorphic Shell -->
+      <label class="flex items-start gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-tertiary/40 transition-all duration-200">
+        <div class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+          <input id="featurePolymorphicShell" type="checkbox" class="sr-only peer"/>
+          <div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+        </div>
+        <div>
+          <strong class="text-sm text-on-surface block mb-1">多态壳</strong>
+          <span class="text-[11px] text-on-surface-variant leading-relaxed">每次编译生成唯一的壳代码签名，同款应用不同副本之间壳结构不同，显著提高批量逆向门槛</span>
+        </div>
+      </label>
+      <!-- AI Decoy / Canary (P5-7) -->
+      <label class="flex items-start gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-tertiary/40 transition-all duration-200">
+        <div class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+          <input id="featureAiDecoy" type="checkbox" class="sr-only peer"/>
+          <div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-tertiary"></div>
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5 mb-1">
+            <strong class="text-sm text-on-surface">AI 诱饵 / canary</strong>
+            <span class="px-1.5 py-0 text-[9px] font-bold rounded bg-tertiary/15 text-tertiary uppercase">P5-7</span>
+          </div>
+          <span class="text-[11px] text-on-surface-variant leading-relaxed">注入假密钥/假 flag/假 API + per-build 唯一 canary token，污染 AI 自动逆向输出并可溯源（商业模式自动开启）</span>
+        </div>
+      </label>
+    </div>
+  </div>
+</details>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- Row 4: Risk Detection  (default collapsed)                 -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<details class="group glass-panel rounded-xl border border-outline-variant/20 shadow-xl mb-6">
+  <summary class="flex items-center gap-3 p-5 md:p-6 cursor-pointer list-none select-none hover:bg-surface-container-low/20 rounded-xl transition-colors">
+    <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-90 transition-transform duration-200 shrink-0">chevron_right</span>
+    <div class="p-2 bg-yellow-500/10 rounded-lg shrink-0">
+      <span class="material-symbols-outlined text-yellow-400">security</span>
+    </div>
+    <div class="flex-1 min-w-0">
+      <h2 class="text-lg font-headline font-bold text-white">风险检测</h2>
+      <p class="text-xs text-on-surface-variant">运行环境风险检测与处理策略</p>
+    </div>
+    <span class="text-[10px] text-slate-600 shrink-0 hidden sm:inline">4 项检测 + 策略</span>
+  </summary>
+  <div class="px-5 md:px-6 pb-6 space-y-6">
+    <!-- Detection Toggle Switches -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <label class="relative flex items-start gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-secondary/40 transition-all duration-200 group">
+        <div class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+          <input id="detectRoot" checked="" class="sr-only peer" type="checkbox"/>
+          <div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-1.5 mb-1">
+            <strong class="text-sm text-on-surface">Root 检测</strong>
+            <span class="material-symbols-outlined text-amber-400 text-xs" title="可能误报真实用户">warning</span>
+          </div>
+          <span class="text-[11px] text-on-surface-variant leading-relaxed">检测设备是否已 root/越狱</span>
+          <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 bg-slate-900 border border-amber-400/30 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none">
+            <p class="text-[10px] text-amber-400 font-bold mb-1">⚠ 兼容性警告</p>
+            <p class="text-[10px] text-on-surface-variant leading-relaxed">部分安全应用和系统工具可能触发 Root 特征，balanced/compat 档位下不会杀进程。</p>
+          </div>
+        </div>
+      </label>
+      <label class="relative flex items-start gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-secondary/40 transition-all duration-200 group">
+        <div class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+          <input id="detectEmulator" checked="" class="sr-only peer" type="checkbox"/>
+          <div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-1.5 mb-1">
+            <strong class="text-sm text-on-surface">模拟器检测</strong>
+            <span class="material-symbols-outlined text-amber-400 text-xs" title="可能误报云手机">warning</span>
+          </div>
+          <span class="text-[11px] text-on-surface-variant leading-relaxed">识别安卓模拟器运行环境</span>
+          <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 bg-slate-900 border border-amber-400/30 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none">
+            <p class="text-[10px] text-amber-400 font-bold mb-1">⚠ 兼容性警告</p>
+            <p class="text-[10px] text-on-surface-variant leading-relaxed">云游戏、云手机平台可能被误判，balanced/compat 档位下仅记录不杀进程。</p>
+          </div>
+        </div>
+      </label>
+      <label class="relative flex items-start gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-secondary/40 transition-all duration-200 group">
+        <div class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+          <input id="protectDexPages" checked="" class="sr-only peer" type="checkbox"/>
+          <div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-1.5 mb-1">
+            <strong class="text-sm text-on-surface">DEX 页封存</strong>
+            <span class="material-symbols-outlined text-error text-xs" title="高风险特性">priority_high</span>
+          </div>
+          <span class="text-[11px] text-on-surface-variant leading-relaxed">加载后延迟封存内存 DEX 页</span>
+          <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 bg-slate-900 border border-error/30 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none">
+            <p class="text-[10px] text-error font-bold mb-1">⚠ 高风险警告</p>
+            <p class="text-[10px] text-on-surface-variant leading-relaxed">部分低端设备或系统插件可能触发 SEGV，开启前请充分测试。balanced 档位下触发后自动回退。</p>
+          </div>
+        </div>
+      </label>
+      <label class="relative flex items-start gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-secondary/40 transition-all duration-200 group">
+        <div class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+          <input id="blockProxyVpn" class="sr-only peer" type="checkbox"/>
+          <div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-1.5 mb-1">
+            <strong class="text-sm text-on-surface">代理/VPN 拦截</strong>
+            <span class="material-symbols-outlined text-amber-400 text-xs" title="企业 VPN 可能触发">warning</span>
+          </div>
+          <span class="text-[11px] text-on-surface-variant leading-relaxed">阻断代理/VPN 流量劫持风险</span>
+          <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 bg-slate-900 border border-amber-400/30 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none">
+            <p class="text-[10px] text-amber-400 font-bold mb-1">⚠ 兼容性警告</p>
+            <p class="text-[10px] text-on-surface-variant leading-relaxed">企业 VPN、特定运营商网络优化工具可能被检测，balanced/compat 档位下仅记录。</p>
+          </div>
+        </div>
+      </label>
+    </div>
+
+    <!-- Risk Strategy Radio Group -->
+    <div class="pt-4 border-t border-outline-variant/20">
+      <div class="flex items-center justify-between mb-4">
+        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">风险处理策略</label>
+        <div class="flex items-center gap-2 px-2 py-1 bg-surface-container-high/50 rounded-lg border border-outline-variant/20">
+          <span class="material-symbols-outlined text-xs text-secondary">info</span>
+          <span class="text-[9px] text-on-surface-variant">默认分级响应 - balanced/compat 不杀进程</span>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+        <label class="relative flex items-center gap-2.5 p-3 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:border-secondary/40 transition-all has-[:checked]:border-secondary has-[:checked]:bg-secondary/5 group">
+          <input checked="" class="w-4 h-4 border-2 border-secondary bg-transparent text-secondary focus:ring-0" name="strategy" type="radio" data-policy="block" value="block"/>
+          <div>
+            <span class="text-xs font-bold text-on-surface block">阻断</span>
+            <span class="text-[10px] text-on-surface-variant">记录 + 限制功能</span>
+          </div>
+          <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-900 border border-secondary/30 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none">
+            <p class="text-[10px] text-secondary font-bold mb-1">商业推荐配置</p>
+            <p class="text-[10px] text-on-surface-variant leading-relaxed">balanced/compat 档位下检测到风险记录并限制敏感功能，不杀进程；strict/commercial 档位可选择终止。适合商业场景。</p>
+          </div>
+        </label>
+        <label class="relative flex items-center gap-2.5 p-3 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:border-primary/40 transition-all has-[:checked]:border-primary has-[:checked]:bg-primary/5 group">
+          <input class="w-4 h-4 border-2 border-outline-variant bg-transparent text-secondary focus:ring-0" name="strategy" type="radio" data-policy="degrade" value="degrade"/>
+          <div>
+            <span class="text-xs font-bold text-on-surface block">降级运行</span>
+            <span class="text-[10px] text-on-surface-variant">自动关闭保护</span>
+          </div>
+          <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-900 border border-primary/30 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none">
+            <p class="text-[10px] text-primary font-bold mb-1">兼容性优先</p>
+            <p class="text-[10px] text-on-surface-variant leading-relaxed">检测到风险环境时自动禁用部分保护特性以保证运行，适合开发/测试或对兼容性要求极高的场景。</p>
+          </div>
+        </label>
+        <label class="relative flex items-center gap-2.5 p-3 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:border-tertiary/40 transition-all has-[:checked]:border-tertiary has-[:checked]:bg-tertiary/5 group">
+          <input class="w-4 h-4 border-2 border-outline-variant bg-transparent text-secondary focus:ring-0" name="strategy" type="radio" data-policy="warn" value="warn"/>
+          <div>
+            <span class="text-xs font-bold text-on-surface block">提示用户</span>
+            <span class="text-[10px] text-on-surface-variant">弹出警告对话框</span>
+          </div>
+          <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-900 border border-tertiary/30 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none">
+            <p class="text-[10px] text-tertiary font-bold mb-1">用户自主决策</p>
+            <p class="text-[10px] text-on-surface-variant leading-relaxed">向用户说明检测到的风险，让用户决定是否继续使用。适合信任用户环境的内部应用。</p>
+          </div>
+        </label>
+        <label class="relative flex items-center gap-2.5 p-3 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:border-slate-400/40 transition-all has-[:checked]:border-slate-400 has-[:checked]:bg-slate-400/5 group">
+          <input class="w-4 h-4 border-2 border-outline-variant bg-transparent text-secondary focus:ring-0" name="strategy" type="radio" data-policy="log" value="log"/>
+          <div>
+            <span class="text-xs font-bold text-on-surface block">静默上报</span>
+            <span class="text-[10px] text-on-surface-variant">仅记录不阻断</span>
+          </div>
+          <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-900 border border-slate-400/30 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none">
+            <p class="text-[10px] text-slate-400 font-bold mb-1">观察模式</p>
+            <p class="text-[10px] text-on-surface-variant leading-relaxed">仅记录风险事件不做任何限制，用于收集灰度数据或分析误报率。调试专用。</p>
+          </div>
+        </label>
+        <label class="relative flex items-center gap-2.5 p-3 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:border-error/40 transition-all has-[:checked]:border-error has-[:checked]:bg-error/5 group">
+          <input class="w-4 h-4 border-2 border-outline-variant bg-transparent text-secondary focus:ring-0" name="strategy" type="radio" data-policy="off" value="off"/>
+          <div>
+            <span class="text-xs font-bold text-on-surface block">关闭检测</span>
+            <span class="text-[10px] text-on-surface-variant">仅开发调试</span>
+          </div>
+          <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-900 border border-error/30 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none">
+            <p class="text-[10px] text-error font-bold mb-1">完全关闭</p>
+            <p class="text-[10px] text-on-surface-variant leading-relaxed">不执行任何运行时风险检测，仅供本地开发调试使用，禁止用于生产环境。</p>
+          </div>
+        </label>
+      </div>
+      <!-- Risk Profile hint below strategy -->
+      <div class="mt-3 p-3 bg-surface-container-highest/30 rounded-lg border border-outline-variant/10">
+        <div class="flex items-start gap-2">
+          <span class="material-symbols-outlined text-xs text-primary shrink-0 mt-0.5">lightbulb</span>
+          <div class="text-[10px] text-on-surface-variant leading-relaxed">
+            <strong class="text-primary">商业场景推荐：</strong> 阻断策略 + balanced 档位（默认） - 检测到风险记录并限制敏感功能不杀进程，兼顾安全与用户体验。
+            <strong class="text-amber-400 ml-2">强对抗实验：</strong> 阻断策略 + strict/commercial 档位 - 高置信度风险可终止进程，适合金融/支付等强安全场景。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</details>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- Row 5: Target Platform + Thresholds  (default collapsed)   -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<details class="group glass-panel rounded-xl border border-outline-variant/20 shadow-xl mb-6">
+  <summary class="flex items-center gap-3 p-5 md:p-6 cursor-pointer list-none select-none hover:bg-surface-container-low/20 rounded-xl transition-colors">
+    <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-90 transition-transform duration-200 shrink-0">chevron_right</span>
+    <div class="p-2 bg-secondary/10 rounded-lg shrink-0">
+      <span class="material-symbols-outlined text-secondary">devices</span>
+    </div>
+    <div class="flex-1 min-w-0">
+      <h2 class="text-lg font-headline font-bold text-white">目标平台与阈值</h2>
+      <p class="text-xs text-on-surface-variant">ABI 选择 · 最少保护数量</p>
+    </div>
+    <span id="abiSummary" class="text-[10px] text-on-surface-variant shrink-0 mr-2">已选 1 个平台</span>
+  </summary>
+  <div class="px-5 md:px-6 pb-6 space-y-6">
+    <!-- ABI Selection -->
+    <div>
+      <label class="text-[10px] font-bold text-slate-500 block mb-3 uppercase tracking-widest">指令集架构 (ABI)</label>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <label class="abi-card flex flex-col items-center gap-1.5 p-3 bg-surface-container rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-primary/30 transition-all duration-200 text-center">
+          <input id="abiArm64" type="checkbox" checked class="mb-0.5"/>
+          <span class="text-xs font-bold text-on-surface">ARM64</span>
+          <span class="text-[10px] text-on-surface-variant leading-tight">现代手机/平板</span>
+        </label>
+        <label class="abi-card flex flex-col items-center gap-1.5 p-3 bg-surface-container rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-primary/30 transition-all duration-200 text-center">
+          <input id="abiArm32" type="checkbox" class="mb-0.5"/>
+          <span class="text-xs font-bold text-on-surface">ARMv7</span>
+          <span class="text-[10px] text-on-surface-variant leading-tight">旧设备兼容</span>
+        </label>
+        <label class="abi-card flex flex-col items-center gap-1.5 p-3 bg-surface-container rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-primary/30 transition-all duration-200 text-center">
+          <input id="abiX86_64" type="checkbox" class="mb-0.5"/>
+          <span class="text-xs font-bold text-on-surface">x86_64</span>
+          <span class="text-[10px] text-on-surface-variant leading-tight">模拟器/Chrome</span>
+        </label>
+        <label class="abi-card flex flex-col items-center gap-1.5 p-3 bg-surface-container rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-primary/30 transition-all duration-200 text-center">
+          <input id="abiX86" type="checkbox" class="mb-0.5"/>
+          <span class="text-xs font-bold text-on-surface">x86</span>
+          <span class="text-[10px] text-on-surface-variant leading-tight">旧模拟器</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Minimum Thresholds -->
+    <div class="pt-4 border-t border-outline-variant/20">
+      <label class="text-[10px] font-bold text-slate-500 block mb-3 uppercase tracking-widest">最少保护方法数</label>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="field">
+          <span class="text-xs text-on-surface-variant">Min Extract</span>
+          <input id="minExtract" type="number" value="120" min="0" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+        </div>
+        <div class="field">
+          <span class="text-xs text-on-surface-variant">Min VMP</span>
+          <input id="minVmp" type="number" value="30" min="0" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+        </div>
+        <div class="field">
+          <span class="text-xs text-on-surface-variant">Min DEX2C</span>
+          <input id="minDex2c" type="number" value="15" min="0" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+        </div>
+        <div class="field">
+          <span class="text-xs text-on-surface-variant">Min Score</span>
+          <input id="minScore" type="number" value="80" min="0" max="100" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+        </div>
+      </div>
+    </div>
+  </div>
+</details>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- Row 6: Build & Release  (default collapsed)                -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<details class="group glass-panel rounded-xl border border-outline-variant/20 shadow-xl mb-6">
+  <summary class="flex items-center gap-3 p-5 md:p-6 cursor-pointer list-none select-none hover:bg-surface-container-low/20 rounded-xl transition-colors">
+    <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-90 transition-transform duration-200 shrink-0">chevron_right</span>
+    <div class="p-2 bg-cyan-500/10 rounded-lg shrink-0">
+      <span class="material-symbols-outlined text-cyan-400">manufacturing</span>
+    </div>
+    <div class="flex-1 min-w-0">
+      <h2 class="text-lg font-headline font-bold text-white">构建与发布</h2>
+      <p class="text-xs text-on-surface-variant">Shell · 输出 · 工具链 · 发布产物</p>
+    </div>
+    <span class="text-[10px] text-slate-600 shrink-0 hidden sm:inline">高级</span>
+  </summary>
+  <div class="px-5 md:px-6 pb-6 space-y-5">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <label class="flex items-start gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-rose-400/40 transition-all duration-200">
+        <div class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+          <input id="commercialMode" type="checkbox" class="sr-only peer"/>
+          <div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-400"></div>
+        </div>
+        <div>
+          <strong class="text-sm text-on-surface block mb-1">商业发布模式</strong>
+          <span class="text-[11px] text-on-surface-variant leading-relaxed">独立密钥、报告和严格发布检查按生产约束收敛，默认保留外部原证书签名流程</span>
+        </div>
+      </label>
+      <label class="flex items-start gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-secondary/40 transition-all duration-200">
+        <div class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+          <input id="perApkKey" type="checkbox" class="sr-only peer" checked/>
+          <div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+        </div>
+        <div>
+          <strong class="text-sm text-on-surface block mb-1">Per-APK 密钥</strong>
+          <span class="text-[11px] text-on-surface-variant leading-relaxed">每个 APK 使用独立 payload 密钥，降低同批样本复用风险</span>
+        </div>
+      </label>
+      <label class="flex items-start gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20 cursor-pointer hover:bg-surface-bright hover:border-cyan-400/40 transition-all duration-200">
+        <div class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+          <input id="releaseManifestEnabled" type="checkbox" class="sr-only peer"/>
+          <div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-400"></div>
+        </div>
+        <div>
+          <strong class="text-sm text-on-surface block mb-1">Release Manifest</strong>
+          <span class="text-[11px] text-on-surface-variant leading-relaxed">使用发布清单固定版本、epoch、证书摘要和发布策略</span>
+        </div>
+      </label>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 pt-4 border-t border-outline-variant/20">
+      <div class="field">
+        <span class="text-xs text-on-surface-variant">Shell APK</span>
+        <input id="shellApk" type="text" placeholder="留空使用默认 shell APK" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+      </div>
+      <div class="field">
+        <span class="text-xs text-on-surface-variant">输出 APK</span>
+        <input id="outputApk" type="text" placeholder="留空自动生成到任务缓存" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+      </div>
+      <div class="field">
+        <span class="text-xs text-on-surface-variant">NDK 路径</span>
+        <input id="ndkPath" type="text" value="<auto-detected>" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+      </div>
+      <div class="field">
+        <span class="text-xs text-on-surface-variant">保护映射</span>
+        <input id="protectionMap" type="text" value="" placeholder="auto-protect-demo.txt" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+      </div>
+      <div class="field">
+        <span class="text-xs text-on-surface-variant">报告 JSON</span>
+        <input id="reportJsonPath" type="text" value="" placeholder="留空自动生成 report.json" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+      </div>
+      <div id="releaseManifestBox" class="field" style="display:none">
+        <span class="text-xs text-on-surface-variant">Release Manifest 路径</span>
+        <input id="releaseManifestPath" type="text" value="release/release_manifest.json" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+      </div>
+    </div>
+  </div>
+</details>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- Row 7: Signing Configuration  (default collapsed)          -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<details class="group glass-panel rounded-xl border border-outline-variant/20 shadow-xl mb-6">
+  <summary class="flex items-center gap-3 p-5 md:p-6 cursor-pointer list-none select-none hover:bg-surface-container-low/20 rounded-xl transition-colors">
+    <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-90 transition-transform duration-200 shrink-0">chevron_right</span>
+    <div class="p-2 bg-rose-500/10 rounded-lg shrink-0">
+      <span class="material-symbols-outlined text-rose-400">key</span>
+    </div>
+    <div class="flex-1 min-w-0">
+      <h2 class="text-lg font-headline font-bold text-white">输出重签名</h2>
+      <p class="text-xs text-on-surface-variant">仅在你持有目标 APK 原证书私钥时启用</p>
+    </div>
+    <label class="inline-flex items-center gap-3 shrink-0 text-xs text-on-surface-variant cursor-pointer" onclick="event.stopPropagation()">
+      <span>加固端签名</span>
+      <span class="relative inline-flex items-center">
+        <input id="signingEnabled" type="checkbox" class="sr-only peer"/>
+        <span class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-400"></span>
+      </span>
+    </label>
+  </summary>
+  <div id="signingBox" class="px-5 md:px-6 pb-6" style="display:none">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div class="field">
+        <span class="text-xs text-on-surface-variant">Keystore 路径</span>
+        <input id="keystorePath" type="text" placeholder="原证书 keystore 路径" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+      </div>
+      <div class="field">
+        <span class="text-xs text-on-surface-variant">Key Alias</span>
+        <input id="keyAlias" type="text" placeholder="密钥别名" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+      </div>
+      <div class="field">
+        <span class="text-xs text-on-surface-variant">Keystore 密码</span>
+        <input id="ksPass" type="password" placeholder="Keystore 密码" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+      </div>
+      <div class="field">
+        <span class="text-xs text-on-surface-variant">Key 密码</span>
+        <input id="keyPass" type="password" placeholder="Key 密码（留空同 Keystore 密码）" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+      </div>
+    </div>
+    <p class="mt-3 text-[11px] text-on-surface-variant leading-relaxed">仅当这里填写的是业务 APK 的原始签名私钥时启用。否则请关闭加固端签名，使用下方默认外部同证书重签流程。</p>
+  </div>
+  <div id="externalSigningBox" class="px-5 md:px-6 pb-6">
+    <div class="field">
+      <span class="text-xs text-on-surface-variant">原证书 SHA-256（可选兜底）</span>
+      <input id="signCertSha256" type="text" placeholder="默认自动从输入 APK 读取；读取失败时手填 64 位 SHA-256" class="w-full px-3 py-2.5 bg-surface-container border border-outline-variant/20 rounded-lg text-sm text-on-surface font-mono focus:outline-none focus:border-primary"/>
+    </div>
+    <p class="mt-3 text-[11px] text-on-surface-variant leading-relaxed">默认不在加固端重签名。产物保持 unsigned/aligned，业务方需使用输入 APK 相同证书重新签名；运行时签名校验会 pin 输入 APK 的证书 SHA-256。</p>
+  </div>
+</details>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- Row 8: Summary Bar + Actions                               -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="glass-panel p-5 md:p-6 rounded-xl border border-secondary/20 bg-secondary/5 space-y-4 mb-6">
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h3 class="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">加固摘要</h3>
+      <div class="flex flex-wrap items-center gap-4 text-xs">
+        <span class="text-on-surface-variant flex items-center gap-1.5"><span class="material-symbols-outlined" style="font-size:14px">devices</span>目标平台</span>
+        <span id="summaryAbis" class="text-secondary font-bold">ARM64</span>
+        <span class="w-px h-4 bg-outline-variant/30 hidden sm:block"></span>
+        <span class="text-on-surface-variant flex items-center gap-1.5"><span class="material-symbols-outlined" style="font-size:14px">shield</span>保护功能</span>
+        <span id="summaryFeatures" class="text-primary font-bold">Extract · DEX2C</span>
+        <span class="w-px h-4 bg-outline-variant/30 hidden sm:block"></span>
+        <span class="text-on-surface-variant flex items-center gap-1.5"><span class="material-symbols-outlined" style="font-size:14px">security</span>风险策略</span>
+        <span id="summaryPolicy" class="text-on-surface font-medium">阻断 / 严格</span>
+      </div>
+      <div id="capabilityMatrix" class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-5 gap-y-2 border-t border-outline-variant/20 pt-4"></div>
+    </div>
+    <div class="flex items-center gap-3">
+      <button id="copyCommand" class="btn-lift px-5 py-2.5 rounded-xl font-headline font-medium text-primary bg-transparent border border-primary/20 hover:bg-primary/5 transition-all text-sm">
+        <span class="material-symbols-outlined text-sm align-middle mr-1.5">content_copy</span>复制命令
+      </button>
+      <button id="startHardening" class="btn-lift px-6 py-3 rounded-xl font-headline font-bold text-on-primary-fixed bg-gradient-to-r from-primary to-primary-container shadow-[0_0_20px_rgba(105,156,255,0.3)] hover:scale-[1.02] active:scale-95 transition-all text-sm">
+        开始加固
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- Row 9: Command Preview                                    -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="space-y-6">
+  <!-- Command Preview -->
+  <section class="glass-panel rounded-xl border border-outline-variant/20 shadow-xl">
+    <button id="cmdPreviewToggle" onclick="document.getElementById('commandPreview').classList.toggle('hidden'); this.querySelector('.expand-icon').classList.toggle('rotate-180')" class="w-full flex items-center justify-between p-4 text-left hover:bg-surface-container-low/50 rounded-xl transition-colors">
+      <div class="flex items-center gap-3">
+        <span class="material-symbols-outlined text-primary text-xl">terminal</span>
+        <span class="text-sm font-medium text-slate-400">命令预览</span>
+      </div>
+      <span class="material-symbols-outlined text-sm text-slate-500 expand-icon transition-transform">expand_more</span>
+    </button>
+    <pre id="commandPreview" class="hidden bg-slate-950 text-green-400 text-xs font-mono p-4 mx-4 mb-4 rounded-lg overflow-x-auto max-h-64 border border-slate-800 whitespace-pre-wrap break-all">配置参数后将在此处生成命令...</pre>
+  </section>
+  <section class="glass-panel p-5 rounded-xl border border-outline-variant/20 shadow-xl flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <span class="material-symbols-outlined text-secondary">route</span>
+      <div>
+        <p class="text-sm font-headline font-bold text-on-surface">提交后进入任务详情</p>
+        <p class="text-xs text-on-surface-variant">加固在后台运行，可以离开页面后从任务列表继续查看。</p>
+      </div>
+    </div>
+    <button class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-outline-variant/30 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" onclick="navigateTo('jobs')">
+      <span class="material-symbols-outlined text-sm">list_alt</span>查看任务列表
+    </button>
+  </section>
+</div>
+
+</div>
+</section>

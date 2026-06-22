@@ -1,0 +1,150 @@
+plugins {
+    id 'com.android.application'
+}
+
+import java.security.SecureRandom
+import java.util.Base64
+import java.util.Properties
+
+def enkoReleaseObfuscate = (project.findProperty('enkoReleaseObfuscate') ?: 'false')
+        .toString()
+        .toBoolean()
+def enkoHardRelease = (project.findProperty('enkoHardRelease') ?: 'true')
+        .toString()
+        .toBoolean()
+def enkoAllowWeakRelease = (project.findProperty('enkoAllowWeakRelease') ?: 'false')
+        .toString()
+        .toBoolean()
+
+def obfSpecFile = file('obf-strings.properties')
+def obfGeneratedRoot = file("$buildDir/generated/source/obf")
+def obfGeneratedJava = file("$obfGeneratedRoot/com/example/demo/ObfStrings.java")
+
+def obfEncode = { String raw, int buildKey, int salt ->
+    byte[] src = raw.getBytes("UTF-8")
+    byte[] out = new byte[src.length]
+    for (int i = 0; i < src.length; i++) {
+        int k = (buildKey + salt + (i * 131)) & 0xFF
+        out[i] = (byte) ((src[i] & 0xFF) ^ k)
+    }
+    return Base64.getEncoder().encodeToString(out)
+}
+
+tasks.register('generateObfStrings') {
+    inputs.file(obfSpecFile)
+    outputs.file(obfGeneratedJava)
+    outputs.upToDateWhen { false }
+    doLast {
+        if (!obfSpecFile.exists()) {
+            throw new GradleException("missing obfuscation spec: ${obfSpecFile}")
+        }
+
+        Properties props = new Properties()
+        obfSpecFile.withInputStream { props.load(it) }
+
+        int buildKey = new SecureRandom().nextInt()
+        List<String> keys = new ArrayList<>(props.stringPropertyNames())
+        Collections.sort(keys)
+
+        obfGeneratedJava.parentFile.mkdirs()
+        StringBuilder out = new StringBuilder()
+        out.append("package com.example.demo;\n\n")
+        out.append("import android.util.Base64;\n")
+        out.append("import java.nio.charset.StandardCharsets;\n\n")
+        out.append("final class ObfStrings {\n")
+        out.append("    private static final int BUILD_KEY = ${buildKey};\n\n")
+        out.append("    private ObfStrings() {}\n\n")
+        out.append("    private static String d(String b64, int salt) {\n")
+        out.append("        byte[] data = Base64.decode(b64, Base64.NO_WRAP);\n")
+        out.append("        for (int i = 0; i < data.length; i++) {\n")
+        out.append("            int k = (BUILD_KEY + salt + (i * 131)) & 0xFF;\n")
+        out.append("            data[i] = (byte) ((data[i] & 0xFF) ^ k);\n")
+        out.append("        }\n")
+        out.append("        return new String(data, StandardCharsets.UTF_8);\n")
+        out.append("    }\n\n")
+
+        keys.eachWithIndex { String key, int idx ->
+            String method = key.replaceAll('[^A-Za-z0-9_]', '_')
+            if (method.isEmpty() || Character.isDigit(method.charAt(0))) {
+                method = "_" + method
+            }
+            int salt = 1009 + (idx * 977)
+            String encoded = obfEncode(props.getProperty(key), buildKey, salt)
+            out.append("    private static final String ${method}_V = d(\"${encoded}\", ${salt});\n")
+            out.append("    static String ${method}() { return ${method}_V; }\n\n")
+        }
+
+        out.append("}\n")
+        obfGeneratedJava.setText(out.toString(), 'UTF-8')
+    }
+}
+
+android {
+    namespace 'com.example.demo'
+    compileSdk 36
+    buildToolsVersion "36.1.0"
+
+    signingConfigs {
+        ci {
+            storeFile file('../../enko-ci.jks')
+            storePassword 'enkotest'
+            keyAlias 'enko'
+            keyPassword 'enkotest'
+        }
+    }
+
+    defaultConfig {
+        applicationId "com.example.demo"
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName "1.0"
+        signingConfig signingConfigs.ci
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+            signingConfig signingConfigs.ci
+        }
+        release {
+            minifyEnabled enkoReleaseObfuscate
+            shrinkResources enkoReleaseObfuscate
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.ci
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+
+    sourceSets {
+        main {
+            java.srcDir obfGeneratedRoot
+        }
+    }
+}
+
+tasks.named('preBuild').configure {
+    dependsOn(tasks.named('generateObfStrings'))
+}
+
+dependencies {
+}
+
+def enkoReleaseRequested = gradle.startParameter.taskNames.any {
+    it.toLowerCase().contains("release")
+}
+if (enkoReleaseRequested && enkoHardRelease && !enkoReleaseObfuscate && !enkoAllowWeakRelease) {
+    throw new GradleException(
+            "Hard release requires Java/R8 obfuscation. " +
+                    "Use -PenkoReleaseObfuscate=true, or pass -PenkoAllowWeakRelease=true for maintenance builds."
+    )
+}

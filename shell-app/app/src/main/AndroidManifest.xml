@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:name="com.enko.shell.ProxyApplication"
+        android:allowBackup="false"
+        android:extractNativeLibs="true"
+        android:label="@string/app_name"
+        android:supportsRtl="true">
+
+        <!-- Earliest possible native init: ContentProviders load before Application -->
+        <provider
+            android:name="com.enko.shell.EnkoInitProvider"
+            android:authorities="${applicationId}.enko_init"
+            android:exported="false"
+            android:initOrder="999" />
+    </application>
+
+</manifest>

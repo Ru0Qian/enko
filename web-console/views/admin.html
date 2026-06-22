@@ -1,0 +1,45 @@
+<section id="view-admin" class="view-section">
+<div class="pt-24 px-4 md:px-8 pb-12 relative overflow-hidden">
+<div class="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-error/5 blur-[120px] rounded-full -z-10"></div>
+<div class="max-w-4xl mx-auto">
+<div class="mb-8">
+  <h2 class="text-3xl md:text-4xl font-bold font-headline tracking-tighter text-on-surface mb-2">用户管理</h2>
+  <p class="text-on-surface-variant font-body">管理用户账户和订阅等级</p>
+</div>
+
+<!-- Create User Form -->
+<div class="glass-card rounded-2xl p-6 border border-outline-variant/20 mb-6">
+  <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+    <span class="material-symbols-outlined text-primary">person_add</span>创建用户
+  </h3>
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <input id="admin-new-username" type="text" placeholder="用户名" class="bg-surface-container rounded-lg px-4 py-2.5 text-sm text-on-surface border border-outline-variant/20 focus:border-primary focus:outline-none"/>
+    <input id="admin-new-password" type="password" placeholder="密码（至少8位）" class="bg-surface-container rounded-lg px-4 py-2.5 text-sm text-on-surface border border-outline-variant/20 focus:border-primary focus:outline-none"/>
+    <select id="admin-new-tier" class="bg-surface-container rounded-lg px-4 py-2.5 text-sm text-on-surface border border-outline-variant/20 focus:border-primary focus:outline-none">
+      <option value="free">免费版 (Free)</option>
+      <option value="pro">专业版 (Pro)</option>
+    </select>
+    <button id="admin-create-btn" class="px-4 py-2.5 bg-primary text-on-primary rounded-lg font-medium text-sm hover:bg-primary/80 transition-colors">
+      创建
+    </button>
+  </div>
+</div>
+
+<!-- Users Table -->
+<div class="glass-card rounded-2xl p-6 border border-outline-variant/20">
+  <div class="flex items-center justify-between mb-4">
+    <h3 class="text-lg font-bold flex items-center gap-2">
+      <span class="material-symbols-outlined text-primary">group</span>用户列表
+    </h3>
+    <button id="admin-refresh-btn" class="text-xs text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1">
+      <span class="material-symbols-outlined" style="font-size:16px">refresh</span>刷新
+    </button>
+  </div>
+  <div id="admin-users-list" class="space-y-2">
+    <p class="text-sm text-on-surface-variant">加载中...</p>
+  </div>
+</div>
+
+</div>
+</div>
+</section>

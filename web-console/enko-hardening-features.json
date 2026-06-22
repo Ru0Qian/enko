@@ -1,0 +1,1158 @@
+{
+  "schema_version": "1.0.0",
+  "generated_for": "web-ui-feature-catalog",
+  "product": {
+    "name": "Enko",
+    "type": "android-apk-hardening-pipeline",
+    "summary": "离线 Android APK 加固流水线，包含壳加载、运行时风险控制、方法抽取、Dalvik VMP 与 DEX2C 原生编译。",
+    "source_paths": [
+      "packer\\harden_apk.py",
+      "packer\\vmp_compiler.py",
+      "packer\\dex_parser.py",
+      "shell-app\\app\\src\\main\\java\\com\\enko\\shell\\ProxyApplication.java",
+      "shell-app\\app\\src\\main\\cpp\\enko_anti_debug.c",
+      "shell-app\\app\\src\\main\\cpp\\enko_vmp.c",
+      "shell-app\\app\\src\\main\\cpp\\enko_extract.c",
+      "web-console\\app.js"
+    ]
+  },
+  "protection_levels": [
+    {
+      "level": 0,
+      "id": "none",
+      "label": "无保护",
+      "description": "方法保持原样，不做任何加固。"
+    },
+    {
+      "level": 1,
+      "id": "extract",
+      "label": "方法抽取",
+      "description": "从 DEX 中抽取方法体，存入加密 payload，并在运行前恢复到内存。"
+    },
+    {
+      "level": 2,
+      "id": "vmp_dex",
+      "label": "Dalvik VMP",
+      "description": "将 Dalvik 字节码编译为 Enko VMP 字节码，通过原生解释器执行。"
+    },
+    {
+      "level": 3,
+      "id": "dex2c",
+      "label": "DEX2C",
+      "description": "将指定 Dalvik 方法编译为原生代码，并以 JNI 方式注册执行。"
+    }
+  ],
+  "protection_map": {
+    "file_flag": "--protection-map",
+    "format": "<method_spec> <level>",
+    "example": [
+      "Lcom/example/demo/MainActivity;->onCreate(Landroid/os/Bundle;)V 1",
+      "Lcom/example/demo/CryptoHelper;->encrypt(Ljava/lang/String;)Ljava/lang/String; 2",
+      "Lcom/example/demo/LicenseManager;->isActivated()Z 3"
+    ],
+    "notes": [
+      "用于统一配置每个方法的保护级别。",
+      "级别含义：0=none，1=extract，2=vmp，3=dex2c。",
+      "打包器会自动将 protection-map 拆分为 extract、vmp_dex、dex2c 三组目标。"
+    ]
+  },
+  "runtime_loader_pipeline": [
+    {
+      "id": "native-bridge-check",
+      "label": "NativeBridge 可用性检查",
+      "description": "若原生桥不可用，运行时会直接终止。"
+    },
+    {
+      "id": "anti-dump-init",
+      "label": "反转储初始化",
+      "description": "在安装 payload 前初始化 native anti-dump。"
+    },
+    {
+      "id": "identity-gate",
+      "label": "身份校验门",
+      "description": "继续执行前校验包名身份与签名证书 pin。"
+    },
+    {
+      "id": "shell-dex-integrity",
+      "label": "壳 DEX 完整性校验",
+      "description": "加载 payload 前先校验壳 classes.dex。"
+    },
+    {
+      "id": "native-lib-integrity",
+      "label": "Native 聚合完整性校验",
+      "description": "解密 payload 前校验受保护 native 库集合。"
+    },
+    {
+      "id": "rollback-guard",
+      "label": "回滚与重放保护",
+      "description": "利用 build-id、build epoch 与 version 阻止降级或重放包。"
+    },
+    {
+      "id": "risk-gate-preload",
+      "label": "预加载风险门",
+      "description": "在类加载器创建前评估运行时环境风险。"
+    },
+    {
+      "id": "payload-decrypt",
+      "label": "加密 payload 加载",
+      "description": "从原生层读取加密配置和 payload，并用嵌入式或每 APK 独立密钥解密。"
+    },
+    {
+      "id": "dontdump-mark",
+      "label": "不可转储内存标记",
+      "description": "在类加载器接触到 DirectByteBuffer 前，将其标记为不可 dump。"
+    },
+    {
+      "id": "extract-restore",
+      "label": "Extract 恢复",
+      "description": "strict/balanced 档按类加载触发恢复，compat 档可切回创建 ClassLoader 前批量恢复。"
+    },
+    {
+      "id": "in-memory-dex-loader",
+      "label": "内存 DEX 类加载器",
+      "description": "基于解密后的内存 DEX 缓冲区构建 payload 类加载器。"
+    },
+    {
+      "id": "risk-gate-post-loader",
+      "label": "后加载风险门",
+      "description": "替换类加载器后再次评估运行时风险。"
+    },
+    {
+      "id": "dex2c-native-registration",
+      "label": "DEX2C 原生注册",
+      "description": "加载编译后的原生库并注册转换后的方法。"
+    },
+    {
+      "id": "vmp-blob-load",
+      "label": "VMP Blob 加载与注册",
+      "description": "加载 VMP blob，并将 VMP native stub 注册到 payload 类加载器。"
+    },
+    {
+      "id": "real-application-bind",
+      "label": "真实 Application 绑定",
+      "description": "壳初始化完成后绑定并代理原始 Application。"
+    }
+  ],
+  "runtime_risk_bits": [
+    {
+      "bit": 0,
+      "mask": 1,
+      "id": "debugger_attached",
+      "label": "调试器 / ptrace",
+      "sources": [
+        "check_tracer_pid",
+        "check_tracer_pid_syscall",
+        "check_wchan_ptrace"
+      ]
+    },
+    {
+      "bit": 1,
+      "mask": 2,
+      "id": "frida_or_debug_tool",
+      "label": "Frida / 调试工具 / 可疑环境变量",
+      "sources": [
+        "check_frida_maps",
+        "check_frida_threads",
+        "check_frida_memory_pattern",
+        "check_suspicious_fds",
+        "check_frida_server_port",
+        "check_debugger_processes",
+        "check_suspicious_env"
+      ]
+    },
+    {
+      "bit": 2,
+      "mask": 4,
+      "id": "timing_anomaly",
+      "label": "时序异常",
+      "sources": [
+        "clock-based loop timing"
+      ]
+    },
+    {
+      "bit": 3,
+      "mask": 8,
+      "id": "inline_hook",
+      "label": "Inline Hook",
+      "sources": [
+        "check_inline_hooks"
+      ]
+    },
+    {
+      "bit": 4,
+      "mask": 16,
+      "id": "root_environment",
+      "label": "Root 环境",
+      "sources": [
+        "check_root_indicators"
+      ]
+    },
+    {
+      "bit": 5,
+      "mask": 32,
+      "id": "emulator_environment",
+      "label": "模拟器环境",
+      "sources": [
+        "check_emulator_indicators"
+      ]
+    },
+    {
+      "bit": 6,
+      "mask": 64,
+      "id": "hook_framework",
+      "label": "Hook 框架痕迹",
+      "sources": [
+        "check_hook_framework_maps"
+      ]
+    },
+    {
+      "bit": 7,
+      "mask": 128,
+      "id": "dump_tools",
+      "label": "Dump 工具",
+      "sources": [
+        "enko_detect_dump_tools"
+      ]
+    }
+  ],
+  "runtime_detections": [
+    {
+      "id": "tracer-pid",
+      "category": "debugger",
+      "label": "TracerPid 检测",
+      "description": "读取 /proc/self/status 并检查 TracerPid 是否非零。"
+    },
+    {
+      "id": "ptrace-syscall",
+      "category": "debugger",
+      "label": "ptrace syscall 检测",
+      "description": "通过低层 syscall 状态检查识别被调试。"
+    },
+    {
+      "id": "wchan-ptrace",
+      "category": "debugger",
+      "label": "wchan ptrace 检测",
+      "description": "查看 /proc/self/wchan 中是否存在 ptrace 等待状态。"
+    },
+    {
+      "id": "frida-thread-scan",
+      "category": "frida",
+      "label": "Frida 线程扫描",
+      "description": "扫描 /proc/self/task，查找 gmain、gdbus、gum-js-loop、frida-helper、linjector、frida-server 等线程名。"
+    },
+    {
+      "id": "frida-memory-pattern",
+      "category": "frida",
+      "label": "Frida 内存特征扫描",
+      "description": "扫描进程内存映射中的 Frida 字符串与加载痕迹。"
+    },
+    {
+      "id": "frida-maps",
+      "category": "frida",
+      "label": "Frida maps 扫描",
+      "description": "检查 frida-agent、frida-gadget、frida-inject、LIBFRIDA、gum-interceptor 等映射特征。"
+    },
+    {
+      "id": "suspicious-fd-scan",
+      "category": "frida",
+      "label": "可疑 FD 扫描",
+      "description": "扫描 /proc/self/fd，识别 Frida 管道与相关通信痕迹。"
+    },
+    {
+      "id": "frida-port-scan",
+      "category": "frida",
+      "label": "Frida 端口扫描",
+      "description": "扫描本机 27042、27043、4242 端口以检测 frida-server。"
+    },
+    {
+      "id": "debugger-process-scan",
+      "category": "debugger",
+      "label": "调试器进程扫描",
+      "description": "扫描 /proc 中的 gdb、gdbserver、gdbserver64、lldb、lldb-server、strace、ltrace、ida、r2、radare 等进程。"
+    },
+    {
+      "id": "env-injection",
+      "category": "debugger",
+      "label": "环境变量注入检测",
+      "description": "检查 LD_PRELOAD 与 LD_LIBRARY_PATH 中是否注入 frida、xposed、substrate、sandhook、lsposed 等库。"
+    },
+    {
+      "id": "timing-check",
+      "category": "anti-debug",
+      "label": "时序检测",
+      "description": "运行紧凑循环，识别符合单步调试特征的异常耗时。"
+    },
+    {
+      "id": "inline-hook-check",
+      "category": "hook",
+      "label": "Inline Hook 检测",
+      "description": "检查关键函数入口是否被打补丁或跳转。"
+    },
+    {
+      "id": "root-check",
+      "category": "root",
+      "label": "Root 痕迹扫描",
+      "description": "检查常见 root 路径，包括 su、Magisk、KernelSU 等。"
+    },
+    {
+      "id": "emulator-check",
+      "category": "emulator",
+      "label": "模拟器痕迹扫描",
+      "description": "检查系统属性、硬件特征与虚拟设备指纹。"
+    },
+    {
+      "id": "hook-framework-scan",
+      "category": "hook",
+      "label": "Hook 框架扫描",
+      "description": "扫描进程 maps 中的 Xposed、LSPosed、Substrate、SandHook 痕迹。"
+    },
+    {
+      "id": "code-guard-integrity",
+      "category": "integrity",
+      "label": "代码段完整性",
+      "description": "校验受保护代码区域的完整性。"
+    },
+    {
+      "id": "mapped-lib-integrity",
+      "category": "integrity",
+      "label": "已映射库完整性",
+      "description": "校验已映射 native 库的完整性。"
+    },
+    {
+      "id": "anti-dump-tools",
+      "category": "anti-dump",
+      "label": "Dump 工具检测",
+      "description": "识别强 anti-dump 风险信号。"
+    },
+    {
+      "id": "inotify-watchers",
+      "category": "anti-dump",
+      "label": "inotify 监控线程",
+      "description": "启动敏感 /proc 文件访问监控线程。"
+    }
+  ],
+  "runtime_security_gates": [
+    {
+      "id": "package-signature-gate",
+      "label": "包名与签名门",
+      "description": "在 payload 安装前，原生层校验包名与签名 SHA-256。"
+    },
+    {
+      "id": "shell-dex-gate",
+      "label": "壳 DEX 门",
+      "description": "壳 classes.dex 必须通过完整性校验。"
+    },
+    {
+      "id": "native-aggregate-gate",
+      "label": "Native 聚合门",
+      "description": "加密 payload 解密前先校验 native 库集合。"
+    },
+    {
+      "id": "flutter-core-gate",
+      "label": "Flutter 核心门",
+      "description": "Flutter 模式下，对 libapp.so 与 libflutter.so 进行独立完整性保护。"
+    },
+    {
+      "id": "rollback-replay-gate",
+      "label": "回滚 / 重放门",
+      "description": "基于 build-id、构建时间戳与版本信息阻止回滚与重放。"
+    },
+    {
+      "id": "startup-risk-gate",
+      "label": "启动风险门",
+      "description": "在继续执行前综合评估 anti-debug、anti-hook、anti-dump、root、模拟器等风险。"
+    }
+  ],
+  "cli_groups": [
+    {
+      "id": "core-inputs",
+      "label": "基础输入",
+      "options": [
+        {
+          "name": "--input-apk",
+          "type": "path",
+          "required": true,
+          "description": "原始 APK 路径。"
+        },
+        {
+          "name": "--shell-dex",
+          "type": "path",
+          "required": false,
+          "exclusive_with": "--shell-apk",
+          "description": "壳 classes.dex 路径。"
+        },
+        {
+          "name": "--shell-apk",
+          "type": "path",
+          "required": false,
+          "exclusive_with": "--shell-dex",
+          "description": "壳 APK 路径，工具会自动提取 classes.dex。"
+        },
+        {
+          "name": "--output-apk",
+          "type": "path",
+          "required": true,
+          "description": "输出加固 APK 路径。"
+        }
+      ]
+    },
+    {
+      "id": "signing",
+      "label": "输出重签名",
+      "options": [
+        {
+          "name": "--keystore",
+          "type": "path",
+          "default": "",
+          "description": "业务 APK 原始签名 keystore 路径；仅用于加固端可选重签名。"
+        },
+        {
+          "name": "--ks-pass",
+          "type": "string",
+          "default": "",
+          "description": "keystore 密码。"
+        },
+        {
+          "name": "--key-alias",
+          "type": "string",
+          "default": "",
+          "description": "签名别名。"
+        },
+        {
+          "name": "--key-pass",
+          "type": "string",
+          "default": "",
+          "description": "签名 key 密码。"
+        },
+        {
+          "name": "--skip-sign",
+          "type": "boolean",
+          "default": true,
+          "description": "默认跳过加固端签名，输出 unsigned/aligned，交由业务方使用相同原证书重签。"
+        },
+        {
+          "name": "--sign-cert-sha256",
+          "type": "string",
+          "default": "",
+          "description": "原签名证书 SHA-256；默认从已签名输入 APK 自动提取，失败时可手填。"
+        }
+      ]
+    },
+    {
+      "id": "payload-and-keys",
+      "label": "Payload 与密钥",
+      "options": [
+        {
+          "name": "--payload-key-hex",
+          "type": "string",
+          "default": "",
+          "description": "可选 32/64 位十六进制一致性校验密钥；如果传入，必须与原生嵌入密钥一致。"
+        },
+        {
+          "name": "--payload-compress",
+          "type": "enum",
+          "default": "auto",
+          "choices": [
+            "auto",
+            "zlib",
+            "none"
+          ],
+          "description": "payload 加密前压缩模式。"
+        },
+        {
+          "name": "--per-apk-key",
+          "type": "boolean",
+          "default": true,
+          "description": "为每个 APK 生成独立 payload 密钥。"
+        },
+        {
+          "name": "--no-per-apk-key",
+          "type": "boolean",
+          "default": false,
+          "description": "使用旧版共享 payload 密钥。"
+        },
+        {
+          "name": "--native-key-obfuscation",
+          "type": "boolean",
+          "default": false,
+          "deprecated": true,
+          "description": "已废弃，无实际效果。"
+        },
+        {
+          "name": "--no-native-key-obfuscation",
+          "type": "boolean",
+          "default": false,
+          "deprecated": true,
+          "description": "已废弃，对应的关闭开关。"
+        }
+      ]
+    },
+    {
+      "id": "runtime-risk-policy",
+      "label": "运行时风险策略",
+      "options": [
+        {
+          "name": "--risk-policy",
+          "type": "enum",
+          "default": "block",
+          "choices": [
+            "block",
+            "log"
+          ],
+          "description": "检测到风险环境后的处理策略。"
+        },
+        {
+          "name": "--risk-profile",
+          "type": "enum",
+          "default": "balanced",
+          "choices": [
+            "strict",
+            "balanced",
+            "compat"
+          ],
+          "description": "风险评分配置档位。"
+        },
+        {
+          "name": "--block-proxy-vpn",
+          "type": "boolean",
+          "default": true,
+          "exclusive_with": "--allow-proxy-vpn",
+          "description": "将代理、VPN、用户 CA 视为高风险。"
+        },
+        {
+          "name": "--allow-proxy-vpn",
+          "type": "boolean",
+          "default": false,
+          "exclusive_with": "--block-proxy-vpn",
+          "description": "允许代理、VPN、用户 CA。"
+        },
+        {
+          "name": "--detect-emulator",
+          "type": "boolean",
+          "default": true,
+          "exclusive_with": "--disable-emulator-check",
+          "description": "将模拟器信号纳入运行时评估。"
+        },
+        {
+          "name": "--disable-emulator-check",
+          "type": "boolean",
+          "default": false,
+          "exclusive_with": "--detect-emulator",
+          "description": "不将模拟器信号加入运行时原因。"
+        },
+        {
+          "name": "--protect-dex-pages",
+          "type": "boolean",
+          "default": true,
+          "exclusive_with": "--no-protect-dex-pages",
+          "description": "payload DEX 加载完成后延迟封存内存页，不依赖模拟器检测开关。"
+        },
+        {
+          "name": "--no-protect-dex-pages",
+          "type": "boolean",
+          "default": false,
+          "exclusive_with": "--protect-dex-pages",
+          "description": "兼容或调试场景下保留 DEX 内存页可读。"
+        },
+        {
+          "name": "--detect-root",
+          "type": "boolean",
+          "default": true,
+          "exclusive_with": "--disable-root-check",
+          "description": "将 root 信号纳入运行时评估。"
+        },
+        {
+          "name": "--disable-root-check",
+          "type": "boolean",
+          "default": false,
+          "exclusive_with": "--detect-root",
+          "description": "不将 root 信号加入运行时原因。"
+        }
+      ]
+    },
+    {
+      "id": "method-protection-inputs",
+      "label": "方法保护输入",
+      "options": [
+        {
+          "name": "--extract-methods",
+          "type": "path",
+          "default": "",
+          "description": "方法抽取目标列表文件。"
+        },
+        {
+          "name": "--extract-fail-open",
+          "type": "boolean",
+          "default": false,
+          "description": "方法抽取失败时继续打包。"
+        },
+        {
+          "name": "--extract-on-demand",
+          "type": "boolean",
+          "default": "strict/balanced",
+          "exclusive_with": "--extract-bulk-restore",
+          "description": "按类加载触发恢复抽取方法，缩小完整方法体同时驻留窗口。"
+        },
+        {
+          "name": "--extract-bulk-restore",
+          "type": "boolean",
+          "default": "compat",
+          "exclusive_with": "--extract-on-demand",
+          "description": "创建 payload ClassLoader 前批量恢复抽取方法，优先兼容性。"
+        },
+        {
+          "name": "--vmp-dex-methods",
+          "type": "path",
+          "default": "",
+          "description": "Dalvik VMP 目标列表文件。"
+        },
+        {
+          "name": "--vmp-dex-fail-open",
+          "type": "boolean",
+          "default": false,
+          "description": "Dalvik VMP 编译失败时继续打包。"
+        },
+        {
+          "name": "--no-vmp-dex-wipe-insns",
+          "type": "boolean",
+          "default": false,
+          "description": "VMP 打补丁后保留原始 Dalvik 指令字节，不进行擦除。"
+        },
+        {
+          "name": "--dex2c-methods",
+          "type": "path",
+          "default": "",
+          "description": "DEX2C 目标列表文件。"
+        },
+        {
+          "name": "--dex2c-fail-open",
+          "type": "boolean",
+          "default": false,
+          "description": "DEX2C 编译失败时继续打包。"
+        },
+        {
+          "name": "--protection-map",
+          "type": "path",
+          "default": "",
+          "description": "统一配置方法保护级别的文件。"
+        },
+        {
+          "name": "--auto-protect-profile",
+          "type": "enum",
+          "default": "balanced",
+          "choices": ["compat", "balanced", "strong", "extreme"],
+          "description": "无显式 protection-map 时的智能选取档位：兼容、平衡、强保护、极限保护。"
+        }
+      ]
+    },
+    {
+      "id": "native-vmp-libs",
+      "label": "Native 库 VMP",
+      "options": [
+        {
+          "name": "--vmp-command-template",
+          "type": "string",
+          "default": "",
+          "description": "可选外部命令模板，用于虚拟化原生库；占位符：{input} {output} {abi} {lib}。"
+        },
+        {
+          "name": "--vmp-target-libs",
+          "type": "string",
+          "default": "libagpcore.so",
+          "description": "启用 native 库 VMP 时要处理的库名列表，逗号分隔。"
+        },
+        {
+          "name": "--vmp-fail-open",
+          "type": "boolean",
+          "default": false,
+          "description": "外部 native VMP 命令失败时继续打包。"
+        }
+      ]
+    },
+    {
+      "id": "quality-gates",
+      "label": "质量门禁",
+      "options": [
+        {
+          "name": "--min-extract-count",
+          "type": "integer",
+          "default": 0,
+          "description": "方法抽取的最小成功数量。"
+        },
+        {
+          "name": "--min-vmp-dex-count",
+          "type": "integer",
+          "default": 0,
+          "description": "Dalvik VMP 的最小成功数量。"
+        },
+        {
+          "name": "--min-dex2c-count",
+          "type": "integer",
+          "default": 0,
+          "description": "DEX2C 的最小成功数量。"
+        },
+        {
+          "name": "--min-security-score",
+          "type": "integer",
+          "default": 0,
+          "range": [
+            0,
+            100
+          ],
+          "description": "最小安全评分要求。"
+        }
+      ]
+    },
+    {
+      "id": "release-and-reporting",
+      "label": "发布与报告",
+      "options": [
+        {
+          "name": "--report-json",
+          "type": "path",
+          "default": "",
+          "description": "安全报告 JSON 输出路径。"
+        },
+        {
+          "name": "--release-manifest",
+          "type": "path",
+          "default": "",
+          "description": "发布元数据 JSON，包含引擎、规则、策略、protection-map 与 schema 版本。"
+        },
+        {
+          "name": "--flutter-mode",
+          "type": "boolean",
+          "default": false,
+          "description": "将目标 APK 视为 Flutter/原生核心较重，附加 Flutter 原生完整性报告。"
+        },
+        {
+          "name": "--commercial-mode",
+          "type": "boolean",
+          "default": false,
+          "description": "启用商业发布基线：strict/block、运行时证书 pin、zipalign、per-apk-key、禁止 fail-open，默认最低分 90。"
+        },
+        {
+          "name": "--allow-weak-release",
+          "type": "boolean",
+          "default": false,
+          "description": "当无法验证 release 混淆状态时，仍允许继续打包。"
+        },
+        {
+          "name": "--skip-zipalign",
+          "type": "boolean",
+          "default": false,
+          "description": "跳过 zipalign 步骤。"
+        }
+      ]
+    },
+    {
+      "id": "tooling",
+      "label": "工具路径",
+      "options": [
+        {
+          "name": "--ndk-path",
+          "type": "path",
+          "default": "",
+          "description": "Android NDK 路径；Dalvik VMP 与 DEX2C 编译必需。"
+        },
+        {
+          "name": "--apktool",
+          "type": "path",
+          "default": "",
+          "description": "显式指定 apktool 路径。"
+        },
+        {
+          "name": "--zipalign",
+          "type": "path",
+          "default": "",
+          "description": "显式指定 zipalign 路径。"
+        },
+        {
+          "name": "--apksigner",
+          "type": "path",
+          "default": "",
+          "description": "显式指定 apksigner 路径。"
+        },
+        {
+          "name": "--timeout",
+          "type": "integer",
+          "default": 300,
+          "description": "每个外部工具调用的超时时间（秒）。"
+        }
+      ]
+    }
+  ],
+  "commercial_mode_rules": {
+    "description": "启用 --commercial-mode 时自动强制的规则。",
+    "requirements": [
+      "校验输入 APK 的 release 混淆状态",
+      "若提供 shell APK，则校验 shell APK 的 release 混淆状态；否则除非使用 allow-weak-release",
+      "必须能够解析运行时签名证书 pin；输出可保持 unsigned/aligned 并由业务方外部同证书重签",
+      "禁止 skip-zipalign",
+      "禁止所有 fail-open 选项",
+      "risk-policy 必须为 block",
+      "risk-profile 必须为 strict",
+      "必须启用 block-proxy-vpn",
+      "必须启用 per-apk-key",
+      "若未显式设置 min-security-score，则默认提升为 90"
+    ],
+    "auto_minimums": [
+      "如果启用了 extract 且 min-extract-count 为 0，则自动设为 1",
+      "如果启用了 vmp_dex 且 min-vmp-dex-count 为 0，则自动设为 1",
+      "如果启用了 dex2c 且 min-dex2c-count 为 0，则自动设为 1"
+    ]
+  },
+  "security_score": {
+    "grade_bands": [
+      {
+        "grade": "A",
+        "min_score": 90
+      },
+      {
+        "grade": "B",
+        "min_score": 75
+      },
+      {
+        "grade": "C",
+        "min_score": 60
+      },
+      {
+        "grade": "D",
+        "min_score": 0
+      }
+    ],
+    "controls": [
+      {
+        "name": "signed-output",
+        "weight": 20,
+        "enabled_when": "signing_enabled 或已解析原证书 SHA-256 并采用外部同证书重签流程"
+      },
+      {
+        "name": "runtime-signature-pin",
+        "weight": 15,
+        "enabled_when": "存在 sign_cert_sha256"
+      },
+      {
+        "name": "per-apk-payload-key",
+        "weight": 15,
+        "enabled_when": "per_apk_key 为 true"
+      },
+      {
+        "name": "risk-policy-block",
+        "weight": 10,
+        "enabled_when": "risk_policy == block"
+      },
+      {
+        "name": "risk-profile-strict",
+        "weight": 10,
+        "enabled_when": "risk_profile == strict"
+      },
+      {
+        "name": "block-proxy-vpn",
+        "weight": 5,
+        "enabled_when": "block_proxy_vpn 为 true"
+      },
+      {
+        "name": "emulator-check-enabled",
+        "weight": 5,
+        "enabled_when": "detect_emulator 为 true"
+      },
+      {
+        "name": "no-fail-open",
+        "weight": 10,
+        "enabled_when": "所有 fail-open 标志均为 false"
+      },
+      {
+        "name": "zipalign-enabled",
+        "weight": 5,
+        "enabled_when": "skip_zipalign 为 false"
+      },
+      {
+        "name": "method-protection-coverage",
+        "weight": 5,
+        "enabled_when": "compiled_total > 0"
+      },
+      {
+        "name": "commercial-mode",
+        "weight": 5,
+        "enabled_when": "commercial_mode 为 true"
+      },
+      {
+        "name": "flutter-native-core-integrity",
+        "weight": 5,
+        "enabled_when": "Flutter 模式下检测到 libapp 或 libflutter"
+      }
+    ],
+    "coverage_grade_bands": [
+      {
+        "grade": "A",
+        "protectable_coverage_ratio_gte": 0.05
+      },
+      {
+        "grade": "B",
+        "protectable_coverage_ratio_gte": 0.03
+      },
+      {
+        "grade": "C",
+        "protectable_coverage_ratio_gte": 0.015
+      },
+      {
+        "grade": "D",
+        "compiled_total_gt": 0
+      },
+      {
+        "grade": "E",
+        "otherwise": true
+      }
+    ]
+  },
+  "report_schema": {
+    "top_level_fields": [
+      "score",
+      "max_score",
+      "grade",
+      "controls",
+      "recommendations",
+      "method_protection",
+      "target_runtime",
+      "compiled"
+    ],
+    "method_protection_fields": [
+      "requested.extract",
+      "requested.vmp_dex",
+      "requested.dex2c",
+      "compiled.extract",
+      "compiled.vmp_dex",
+      "compiled.dex2c",
+      "requested_total",
+      "compiled_total",
+      "enabled_phases",
+      "compiled_phases",
+      "request_hit_ratio",
+      "protectable_methods_total",
+      "protectable_coverage_ratio",
+      "coverage_target_ratio",
+      "coverage_grade",
+      "role",
+      "score_ratio",
+      "score_points"
+    ],
+    "target_runtime_fields": [
+      "mode",
+      "flutter_detected",
+      "abis",
+      "native_core.libapp.present",
+      "native_core.libapp.path_count",
+      "native_core.libapp.integrity_pinned",
+      "native_core.libapp.paths",
+      "native_core.libflutter.present",
+      "native_core.libflutter.path_count",
+      "native_core.libflutter.integrity_pinned",
+      "native_core.libflutter.paths",
+      "native_core.hook_watch_targets"
+    ],
+    "compiled_fields": [
+      "extract",
+      "vmp_dex",
+      "dex2c"
+    ]
+  },
+  "built_in_profiles": [
+    {
+      "id": "flutter_prod",
+      "label": "Flutter 生产",
+      "target": "flutter",
+      "risk_policy": "block",
+      "risk_profile": "strict",
+      "flutter_mode": true,
+      "commercial_mode": false,
+      "signing_enabled": false,
+      "per_apk_key": true,
+      "detect_root": true,
+      "detect_emulator": true,
+      "block_proxy_vpn": true,
+      "release_manifest_enabled": false,
+      "features": {
+        "extract": true,
+        "vmp_dex": true,
+        "dex2c": true
+      },
+      "minimums": {
+        "extract": 120,
+        "vmp_dex": 30,
+        "dex2c": 15,
+        "security_score": 80
+      }
+    },
+    {
+      "id": "android_prod",
+      "label": "Android 生产",
+      "target": "android",
+      "risk_policy": "block",
+      "risk_profile": "strict",
+      "flutter_mode": false,
+      "commercial_mode": false,
+      "signing_enabled": false,
+      "per_apk_key": true,
+      "detect_root": true,
+      "detect_emulator": true,
+      "block_proxy_vpn": true,
+      "release_manifest_enabled": false,
+      "features": {
+        "extract": true,
+        "vmp_dex": true,
+        "dex2c": true
+      },
+      "minimums": {
+        "extract": 40,
+        "vmp_dex": 20,
+        "dex2c": 5,
+        "security_score": 80
+      }
+    },
+    {
+      "id": "lab_debug",
+      "label": "实验室调试",
+      "target": "flutter",
+      "risk_policy": "log",
+      "risk_profile": "compat",
+      "flutter_mode": true,
+      "commercial_mode": false,
+      "signing_enabled": false,
+      "per_apk_key": true,
+      "detect_root": false,
+      "detect_emulator": false,
+      "block_proxy_vpn": false,
+      "release_manifest_enabled": false,
+      "features": {
+        "extract": true,
+        "vmp_dex": true,
+        "dex2c": true
+      },
+      "minimums": {
+        "extract": 0,
+        "vmp_dex": 0,
+        "dex2c": 0,
+        "security_score": 0
+      }
+    }
+  ],
+  "vmp_engine": {
+    "opcode_count": 150,
+    "supports": [
+      "invoke-custom",
+      "invoke-polymorphic",
+      "try-catch 异常处理",
+      "64 槽 class cache",
+      "128 槽 field id cache",
+      "128 槽 method id cache",
+      "预解码 opcode 数组",
+      "分支预测提示",
+      "NEON / SIMD 批量寄存器清零",
+      "OBFSTR 字符串加密",
+      "按方法注册 native stub"
+    ],
+    "instruction_layout": {
+      "bytes_per_instruction": 8,
+      "fields": [
+        "opcode:uint8",
+        "dst:uint8",
+        "src1:uint8",
+        "src2:uint8",
+        "imm:int32"
+      ]
+    },
+    "polymorphism": {
+      "opcode_shuffle_table_size": 256,
+      "description": "通过 opcode 洗牌表实现每次构建不同的指令映射。"
+    }
+  },
+  "dex_parser_capabilities": [
+    "标准 DEX 解析",
+    "method_handles 解析",
+    "call_sites 解析",
+    "encoded_array 解析",
+    "DEX 038+ map extras 支持",
+    "method handle 与 call site 引用解析辅助方法"
+  ],
+  "ui_seed_sections": [
+    {
+      "id": "target-selection",
+      "label": "目标与方案",
+      "suggested_fields": [
+        "profile",
+        "target",
+        "flutter_mode",
+        "commercial_mode"
+      ]
+    },
+    {
+      "id": "input-output",
+      "label": "输入输出",
+      "suggested_fields": [
+        "input_apk",
+        "shell_apk_or_shell_dex",
+        "output_apk",
+        "ndk_path"
+      ]
+    },
+    {
+      "id": "runtime-risk",
+      "label": "运行时风险策略",
+      "suggested_fields": [
+        "risk_policy",
+        "risk_profile",
+        "detect_root",
+        "detect_emulator",
+        "block_proxy_vpn"
+      ]
+    },
+    {
+      "id": "method-protection",
+      "label": "方法保护",
+      "suggested_fields": [
+        "protection_map",
+        "extract_methods",
+        "vmp_dex_methods",
+        "dex2c_methods",
+        "feature_extract",
+        "feature_vmp_dex",
+        "feature_dex2c"
+      ]
+    },
+    {
+      "id": "signing-and-release",
+      "label": "签名与发布",
+      "suggested_fields": [
+        "keystore",
+        "ks_pass",
+        "key_alias",
+        "key_pass",
+        "skip_sign",
+        "release_manifest",
+        "allow_weak_release"
+      ]
+    },
+    {
+      "id": "quality-gates",
+      "label": "质量门禁",
+      "suggested_fields": [
+        "min_extract_count",
+        "min_vmp_dex_count",
+        "min_dex2c_count",
+        "min_security_score"
+      ]
+    },
+    {
+      "id": "score-and-report",
+      "label": "评分与报告",
+      "suggested_fields": [
+        "score_preview",
+        "grade_preview",
+        "report_json",
+        "recommendations",
+        "compiled_counts"
+      ]
+    }
+  ]
+}

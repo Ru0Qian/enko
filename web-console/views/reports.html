@@ -1,0 +1,241 @@
+<section id="view-reports" class="view-section">
+<div class="pt-24 px-8 pb-12">
+<!-- Report Upload Toolbar -->
+<div class="flex items-center justify-between mb-8">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-2xl">assessment</span>
+<h2 class="font-headline text-2xl font-bold tracking-tight">报告分析</h2>
+</div>
+<div class="flex items-center gap-3">
+<label class="flex items-center gap-2 px-4 py-2 bg-surface-container-high border border-outline-variant/30 rounded-lg hover:bg-surface-bright transition-colors cursor-pointer text-sm">
+<span class="material-symbols-outlined text-sm">upload_file</span>
+<span>上传 report.json</span>
+<input id="reportFile" type="file" accept=".json" class="hidden"/>
+</label>
+<button id="loadSample" class="flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/20 rounded-lg hover:bg-primary/20 transition-colors text-sm text-primary font-medium">
+<span class="material-symbols-outlined text-sm">science</span>
+<span>加载示例报告</span>
+</button>
+</div>
+</div>
+<!-- Score Header Section -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+<div class="lg:col-span-2 glass-panel p-8 rounded-xl relative overflow-hidden flex items-center justify-between">
+<div class="z-10">
+<h2 class="font-headline text-4xl font-bold mb-2 tracking-tight">加固安全评级</h2>
+<p id="rpt-summary-text" class="text-on-surface-variant max-w-md">上传 report.json 或加载示例报告以查看安全评级详情。</p>
+<div class="flex gap-4 mt-6">
+<div class="flex flex-col">
+<span class="text-[10px] uppercase text-slate-500 font-bold tracking-widest mb-1">扫描日期</span>
+<span id="rpt-scan-date" class="text-sm font-mono">—</span>
+</div>
+<div class="w-px h-8 bg-slate-800"></div>
+<div class="flex flex-col">
+<span class="text-[10px] uppercase text-slate-500 font-bold tracking-widest mb-1">目标架构</span>
+<div id="rpt-arch-tags" class="flex gap-1 mt-1">
+<span class="px-2 py-0.5 bg-surface-container-high rounded text-[10px] font-bold border border-outline-variant/30 text-primary">—</span>
+</div>
+</div>
+</div>
+</div>
+<div class="relative flex items-center justify-center w-48 h-48">
+<div class="absolute inset-0 rounded-full border-8 border-slate-800/50"></div>
+<div class="absolute inset-0 rounded-full border-8 radial-gauge opacity-80 blur-[2px]"></div>
+<div class="flex flex-col items-center justify-center z-10">
+<span id="rpt-score-num" class="font-headline text-6xl font-extrabold text-secondary drop-shadow-[0_0_15px_rgba(105,246,184,0.4)]">—</span>
+<span id="rpt-score-grade" class="text-sm font-bold text-slate-400 mt-1">—</span>
+</div>
+</div>
+<!-- Abstract Glow Background -->
+<div class="absolute -right-20 -top-20 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px]"></div>
+</div>
+<div class="glass-panel p-6 rounded-xl flex flex-col justify-between border-l-4 border-tertiary">
+<div>
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-headline text-lg font-bold">运行环境信息</h3>
+<span class="material-symbols-outlined text-tertiary">info</span>
+</div>
+<div id="rpt-env-info" class="space-y-4">
+<div class="flex justify-between items-center">
+<span class="text-sm text-on-surface-variant">运行模式</span>
+<span id="rpt-env-mode" class="px-3 py-1 bg-secondary-container/20 text-secondary text-[10px] font-bold rounded-full border border-secondary/30">—</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-sm text-on-surface-variant">风险策略</span>
+<span id="rpt-env-policy" class="px-3 py-1 bg-primary-container/20 text-primary text-[10px] font-bold rounded-full border border-primary/30">—</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-sm text-on-surface-variant">方法覆盖率</span>
+<span id="rpt-env-coverage" class="px-3 py-1 bg-secondary-container/20 text-secondary text-[10px] font-bold rounded-full border border-secondary/30">—</span>
+</div>
+</div>
+</div>
+<div class="mt-6 p-4 bg-surface-container-low rounded-lg flex items-center gap-3">
+<span class="material-symbols-outlined text-tertiary" style="font-variation-settings: 'FILL' 1;">info</span>
+<p id="rpt-env-note" class="text-xs text-on-surface-variant leading-relaxed">加载报告后将显示详细的安全控制项分析。</p>
+</div>
+</div>
+</section>
+<!-- Main Dashboard Bento Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Recommendations List -->
+<div class="lg:col-span-4 glass-panel rounded-xl overflow-hidden flex flex-col">
+<div class="p-6 border-b border-slate-800/50 bg-slate-900/30 flex items-center justify-between">
+<h3 class="font-headline text-lg font-bold">安全建议</h3>
+<span id="rpt-rec-badge" class="px-2 py-0.5 bg-error/10 text-error text-[10px] font-bold rounded border border-error/20">— 个待处理</span>
+</div>
+<div class="flex-1 p-0">
+<div id="rpt-recommendations" class="divide-y divide-slate-800/50">
+<div class="empty-state empty-state-enhanced">
+<span class="material-symbols-outlined empty-state-float">check_circle</span>
+<p class="text-sm font-medium text-on-surface mb-1">暂无安全建议</p>
+<p class="text-xs">加载报告后将显示安全建议</p>
+</div>
+</div>
+</div>
+<button id="rpt-rec-all-btn" class="m-6 py-2 border border-outline-variant/30 rounded-lg text-sm font-medium hover:bg-slate-800/50 transition-colors hidden">
+                    查看所有建议
+                </button>
+</div>
+<!-- Protection Stats Bar Chart -->
+<div class="lg:col-span-8 glass-panel p-8 rounded-xl flex flex-col">
+<div class="flex items-center justify-between mb-10">
+<div>
+<h3 class="font-headline text-lg font-bold">保护统计</h3>
+<p class="text-xs text-on-surface-variant mt-1">请求保护方法数 vs 实际编译成功数</p>
+</div>
+<div class="flex gap-4">
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 bg-slate-700 rounded-sm"></span>
+<span class="text-[10px] text-on-surface-variant">请求保护</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 bg-secondary rounded-sm"></span>
+<span class="text-[10px] text-on-surface-variant">成功编译</span>
+</div>
+</div>
+</div>
+<div class="flex-1 flex flex-col justify-between gap-12">
+<!-- Row: Extract -->
+<div class="space-y-3">
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
+<span>函数抽取 (EXTRACT)</span>
+<span id="rpt-extract-label" class="text-on-surface">— / — (—)</span>
+</div>
+<div class="h-6 w-full bg-surface-container-low rounded-full overflow-hidden flex">
+<div id="rpt-extract-bar" class="h-full bg-secondary" style="width: 0%"></div>
+</div>
+</div>
+<!-- Row: VMP -->
+<div class="space-y-3">
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
+<span>虚拟机保护 (VMP)</span>
+<span id="rpt-vmp-label" class="text-on-surface">— / — (—)</span>
+</div>
+<div class="relative h-6 w-full bg-surface-container-low rounded-full overflow-hidden flex">
+<div class="h-full bg-slate-700 absolute inset-0" style="width: 100%"></div>
+<div id="rpt-vmp-bar" class="h-full bg-secondary relative z-10" style="width: 0%"></div>
+</div>
+</div>
+<!-- Row: DEX2C -->
+<div class="space-y-3">
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
+<span>DEX2C (原生化转换)</span>
+<span id="rpt-dex2c-label" class="text-on-surface">— / — (—)</span>
+</div>
+<div class="h-6 w-full bg-surface-container-low rounded-full overflow-hidden flex">
+<div id="rpt-dex2c-bar" class="h-full bg-secondary" style="width: 0%"></div>
+</div>
+</div>
+</div>
+<div class="mt-8 grid grid-cols-3 gap-4 border-t border-slate-800/50 pt-6">
+<div class="text-center">
+<span id="rpt-stat-controls" class="block text-2xl font-bold text-primary">—</span>
+<span class="text-[10px] text-slate-500 uppercase">安全控制项</span>
+</div>
+<div class="text-center border-x border-slate-800/50">
+<span id="rpt-stat-compiled" class="block text-2xl font-bold text-secondary">—</span>
+<span class="text-[10px] text-slate-500 uppercase">总编译方法数</span>
+</div>
+<div class="text-center">
+<span id="rpt-stat-coverage" class="block text-2xl font-bold text-tertiary">—</span>
+<span class="text-[10px] text-slate-500 uppercase">覆盖率等级</span>
+</div>
+</div>
+</div>
+<!-- Runtime Analysis Timeline -->
+<div class="lg:col-span-12 glass-panel p-8 rounded-xl">
+<div class="flex items-center justify-between mb-8">
+<h3 class="font-headline text-lg font-bold">运行时加载流水线</h3>
+<div class="flex items-center gap-2 text-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">history</span>
+<span>分析耗时: 142ms</span>
+</div>
+</div>
+<div class="relative flex items-center justify-between">
+<!-- Connecting Line -->
+<div class="absolute top-1/2 left-0 w-full h-[2px] bg-slate-800 -translate-y-1/2"></div>
+<div class="absolute top-1/2 left-0 h-[2px] bg-gradient-to-r from-secondary to-primary -translate-y-1/2" style="width: 75%"></div>
+<!-- Step 1 -->
+<div class="relative z-10 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-on-secondary shadow-[0_0_15px_rgba(105,246,184,0.3)]">
+<span class="material-symbols-outlined">rocket_launch</span>
+</div>
+<span class="mt-3 text-xs font-bold text-on-surface">Stub 加载</span>
+<span class="mt-1 text-[10px] text-secondary">通过</span>
+</div>
+<!-- Step 2 -->
+<div class="relative z-10 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-on-secondary shadow-[0_0_15px_rgba(105,246,184,0.3)]">
+<span class="material-symbols-outlined">fingerprint</span>
+</div>
+<span class="mt-3 text-xs font-bold text-on-surface">指纹校验</span>
+<span class="mt-1 text-[10px] text-secondary">通过</span>
+</div>
+<!-- Step 3 -->
+<div class="relative z-10 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-on-secondary shadow-[0_0_15px_rgba(105,246,184,0.3)]">
+<span class="material-symbols-outlined">encrypted</span>
+</div>
+<span class="mt-3 text-xs font-bold text-on-surface">内存解密</span>
+<span class="mt-1 text-[10px] text-secondary">通过</span>
+</div>
+<!-- Step 4 -->
+<div class="relative z-10 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-on-primary shadow-[0_0_15px_rgba(133,173,255,0.3)]">
+<span class="material-symbols-outlined">sync_alt</span>
+</div>
+<span class="mt-3 text-xs font-bold text-on-surface">VMP 桥接</span>
+<span class="mt-1 text-[10px] text-primary">处理中</span>
+</div>
+<!-- Step 5 -->
+<div class="relative z-10 flex flex-col items-center opacity-40">
+<div class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-500">
+<span class="material-symbols-outlined">check_circle</span>
+</div>
+<span class="mt-3 text-xs font-bold text-on-surface">入口移交</span>
+<span class="mt-1 text-[10px]">等待中</span>
+</div>
+</div>
+<div class="mt-12 bg-surface-container-lowest/50 rounded-xl p-6 border border-outline-variant/20 font-mono text-sm overflow-x-auto">
+<div class="flex items-center gap-4 text-slate-500 mb-2">
+<span class="text-secondary">[成功]</span>
+<span>已验证 classes.dex 校验和: 0x8A2C...</span>
+</div>
+<div class="flex items-center gap-4 text-slate-500 mb-2">
+<span class="text-secondary">[成功]</span>
+<span>已挂钩 ArtMethod::Invoke 用于 VMP 重定向。</span>
+</div>
+<div class="flex items-center gap-4 text-primary animate-pulse mb-2">
+<span class="text-primary">[忙碌]</span>
+<span>正在初始化 JNI 内部桥接: enko_bridge_v2.so...</span>
+</div>
+<div class="flex items-center gap-4 text-slate-500">
+<span class="text-slate-600">[等待]</span>
+<span>Application.onCreate 正在等待保护流程完成。</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>

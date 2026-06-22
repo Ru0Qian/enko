@@ -1,0 +1,6 @@
+# VMP DEX methods — crypto/license classes
+Lcom/example/demo/CryptoHelper;->encrypt
+Lcom/example/demo/CryptoHelper;->decrypt
+Lcom/example/demo/LicenseManager;->validateLicense
+Lcom/example/demo/LicenseManager;->isActivated
+Lcom/example/demo/LicenseManager;->getStatusText

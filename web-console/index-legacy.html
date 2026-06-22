@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enko Web Console</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%231e302a'/%3E%3Cpath d='M18 18h28v8H28v10h14v8H28v10h-10z' fill='%23f2e8d8'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Enko Web Console</p>
+        <h1>把加固流程搬到网页端，本地就能直接开跑。</h1>
+        <p class="hero-text">
+          这版不是展示图，而是给你本机直接用的控制台。
+          可以选功能、生成命令、启动本地加固任务、查看日志，再把 report.json 拉进来审计。
+        </p>
+        <div class="hero-actions">
+          <button class="action primary" data-profile="flutter_prod" type="button">Flutter 生产模板</button>
+          <button class="action" data-profile="android_prod" type="button">Android 生产模板</button>
+          <button class="action" data-profile="lab_debug" type="button">实验室模板</button>
+        </div>
+      </div>
+      <aside class="hero-panel">
+        <div class="metric">
+          <span class="metric-label">运行时门闩</span>
+          <strong id="heroGateCount">6 + native-core</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">命令模式</span>
+          <strong id="heroMode">Flutter</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">当前策略</span>
+          <strong id="heroPolicy">block / strict</strong>
+        </div>
+      </aside>
+    </header>
+
+    <main class="layout">
+      <section class="panel config-panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker">Step 1</p>
+            <h2>任务配置</h2>
+          </div>
+          <span class="badge" id="profileBadge">Flutter 生产</span>
+        </div>
+
+        <form id="configForm" onsubmit="return false;">
+          <div class="field-grid">
+            <label class="field">
+              <span>输入 APK</span>
+              <input id="inputApk" type="text" value="D:\Engineering\projects\enko\en\app-release_sign.apk">
+            </label>
+            <label class="field">
+              <span>壳 APK</span>
+              <input id="shellApk" type="text" value="D:\Engineering\projects\enko\shell-app\app\build\outputs\apk\release\app-release-unsigned.apk">
+            </label>
+            <label class="field">
+              <span>输出 APK</span>
+              <input id="outputApk" type="text" value="D:\Engineering\projects\enko\output\app-hardened.apk">
+            </label>
+            <label class="field">
+              <span>NDK 路径</span>
+              <input id="ndkPath" type="text" value="D:\Android\Sdk\ndk\your-version">
+            </label>
+            <label class="field">
+              <span>Protection Map</span>
+              <input id="protectionMap" type="text" value="D:\Engineering\projects\enko\en\auto-protect-flutter.txt">
+            </label>
+            <label class="field">
+              <span>Report JSON</span>
+              <input id="reportJsonPath" type="text" value="D:\Engineering\projects\enko\output\hardened.report.json">
+            </label>
+          </div>
+
+          <div class="toggle-groups">
+            <div class="toggle-group">
+              <div class="toggle-group-head">
+                <p class="panel-kicker">Target</p>
+                <h3>目标类型</h3>
+              </div>
+              <div class="chips">
+                <button class="chip active" data-target="flutter" type="button">Flutter</button>
+                <button class="chip" data-target="android" type="button">Android</button>
+              </div>
+            </div>
+
+            <div class="toggle-group">
+              <div class="toggle-group-head">
+                <p class="panel-kicker">Policy</p>
+                <h3>风险策略</h3>
+              </div>
+              <div class="segmented">
+                <button class="seg active" data-policy="block" type="button">block</button>
+                <button class="seg" data-policy="log" type="button">log</button>
+              </div>
+              <div class="segmented">
+                <button class="seg active" data-risk="strict" type="button">strict</button>
+                <button class="seg" data-risk="balanced" type="button">balanced</button>
+                <button class="seg" data-risk="compat" type="button">compat</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="toggle-groups">
+            <div class="toggle-group">
+              <div class="toggle-group-head">
+                <p class="panel-kicker">Protection</p>
+                <h3>方法保护功能</h3>
+              </div>
+              <div class="switch-grid compact">
+                <label class="switch-card">
+                  <input id="featureExtract" type="checkbox" checked>
+                  <span class="switch-ui"></span>
+                  <span class="switch-copy">
+                    <strong>方法提取</strong>
+                    <small>保留 Extract 相位，适合大面积铺覆盖。</small>
+                  </span>
+                </label>
+
+                <label class="switch-card">
+                  <input id="featureVmpDex" type="checkbox" checked>
+                  <span class="switch-ui"></span>
+                  <span class="switch-copy">
+                    <strong>VMP DEX</strong>
+                    <small>保留 level 2 目标，用于更强的 DEX 指令对抗。</small>
+                  </span>
+                </label>
+
+                <label class="switch-card">
+                  <input id="featureDex2c" type="checkbox" checked>
+                  <span class="switch-ui"></span>
+                  <span class="switch-copy">
+                    <strong>DEX2C</strong>
+                    <small>保留 level 3 目标，适合最关键的小范围方法。</small>
+                  </span>
+                </label>
+
+                <label class="switch-card">
+                  <input id="featureVmpShellDex" type="checkbox">
+                  <span class="switch-ui"></span>
+                  <span class="switch-copy">
+                    <strong>壳 VMP 自保护</strong>
+                    <small>用 VMP 保护壳自身关键方法 (installPayload 等)，需要 NDK。</small>
+                  </span>
+                </label>
+
+                <label class="switch-card">
+                  <input id="featurePolymorphicShell" type="checkbox">
+                  <span class="switch-ui"></span>
+                  <span class="switch-copy">
+                    <strong>多态壳</strong>
+                    <small>每次构建随机化壳包名，对抗 FDex2 / DexDump 等通用脱壳。</small>
+                  </span>
+                </label>
+              </div>
+              <p class="inline-note">
+                如果你关闭其中一项，网页端会先生成临时过滤后的 protection map，再交给
+                <code>harden_apk.py</code>。
+              </p>
+            </div>
+
+            <div class="toggle-group">
+              <div class="toggle-group-head">
+                <p class="panel-kicker">Runtime</p>
+                <h3>运行时开关</h3>
+              </div>
+              <div class="switch-grid compact">
+                <label class="switch-card">
+                  <input id="commercialMode" type="checkbox">
+                  <span class="switch-ui"></span>
+                  <span class="switch-copy">
+                    <strong>Commercial Mode</strong>
+                    <small>强制生产基线，自动卡低分包。</small>
+                  </span>
+                </label>
+
+                <label class="switch-card">
+                  <input id="flutterMode" type="checkbox" checked>
+                  <span class="switch-ui"></span>
+                  <span class="switch-copy">
+                    <strong>Flutter Mode</strong>
+                    <small>把重点转到 native-core，而不是误把 DEX 当主战场。</small>
+                  </span>
+                </label>
+
+                <label class="switch-card">
+                  <input id="signingEnabled" type="checkbox">
+                  <span class="switch-ui"></span>
+                  <span class="switch-copy">
+                    <strong>脚本内签名</strong>
+                    <small>关闭后自动追加 <code>--skip-sign</code>。</small>
+                  </span>
+                </label>
+
+                <label class="switch-card">
+                  <input id="perApkKey" type="checkbox" checked>
+                  <span class="switch-ui"></span>
+                  <span class="switch-copy">
+                    <strong>Per-APK Key</strong>
+                    <small>每包随机 key，生产环境建议保持开启。</small>
+                  </span>
+                </label>
+
+                <label class="switch-card">
+                  <input id="detectRoot" type="checkbox" checked>
+                  <span class="switch-ui"></span>
+                  <span class="switch-copy">
+                    <strong>Root 检测</strong>
+                    <small>测试环境容易误杀，生产环境建议开启。</small>
+                  </span>
+                </label>
+
+                <label class="switch-card">
+                  <input id="detectEmulator" type="checkbox" checked>
+                  <span class="switch-ui"></span>
+                  <span class="switch-copy">
+                    <strong>模拟器检测</strong>
+                    <small>实验室验证可关闭，上线时按需开启。</small>
+                  </span>
+                </label>
+
+                <label class="switch-card">
+                  <input id="blockProxyVpn" type="checkbox" checked>
+                  <span class="switch-ui"></span>
+                  <span class="switch-copy">
+                    <strong>代理 / VPN 风险</strong>
+                    <small>把抓包、用户证书、VPN 统一纳入风险策略。</small>
+                  </span>
+                </label>
+
+                <label class="switch-card">
+                  <input id="releaseManifestEnabled" type="checkbox">
+                  <span class="switch-ui"></span>
+                  <span class="switch-copy">
+                    <strong>Release Manifest</strong>
+                    <small>把规则版本写入报告，方便发布审计。</small>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-grid threshold-grid">
+            <label class="field">
+              <span>Min Extract</span>
+              <input id="minExtract" type="number" min="0" value="120">
+            </label>
+            <label class="field">
+              <span>Min VMP DEX</span>
+              <input id="minVmp" type="number" min="0" value="30">
+            </label>
+            <label class="field">
+              <span>Min DEX2C</span>
+              <input id="minDex2c" type="number" min="0" value="15">
+            </label>
+            <label class="field">
+              <span>Min Security Score</span>
+              <input id="minScore" type="number" min="0" max="100" value="90">
+            </label>
+          </div>
+
+          <div class="signing-box" id="signingBox">
+            <div class="toggle-group-head">
+              <p class="panel-kicker">Signing</p>
+              <h3>签名参数</h3>
+            </div>
+            <div class="field-grid">
+              <label class="field">
+                <span>Keystore</span>
+                <input id="keystorePath" type="text" value="D:\Engineering\projects\enko\enko-ci.jks">
+              </label>
+              <label class="field">
+                <span>Store Pass</span>
+                <input id="ksPass" type="password" placeholder="请输入 keystore 密码">
+              </label>
+              <label class="field">
+                <span>Alias</span>
+                <input id="keyAlias" type="text" value="enko">
+              </label>
+              <label class="field">
+                <span>Key Pass</span>
+                <input id="keyPass" type="password" placeholder="请输入 key 密码">
+              </label>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel command-panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker">Step 2</p>
+            <h2>命令预览</h2>
+          </div>
+          <div class="panel-actions">
+            <button class="action small" id="copyCommand" type="button">复制命令</button>
+            <button class="action primary small" id="startHardening" type="button">开始加固</button>
+          </div>
+        </div>
+        <pre id="commandPreview" class="command-block"></pre>
+        <div class="command-notes">
+          <article>
+            <span class="note-tag">流程</span>
+            <p>先确认参数，再决定是直接复制命令，还是点击按钮让本地服务拉起加固任务。</p>
+          </article>
+          <article>
+            <span class="note-tag">Flutter</span>
+            <p>Flutter 模式会把重点转到 <code>libapp.so</code> / <code>libflutter.so</code> 的完整性和 hook 监视。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel job-panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker">Step 3</p>
+            <h2>本地任务</h2>
+          </div>
+          <span class="badge status-badge idle" id="jobStatusBadge">idle</span>
+        </div>
+        <div class="job-summary">
+          <article class="score-card">
+            <span>任务 ID</span>
+            <strong id="jobIdValue">-</strong>
+            <small>启动后自动生成</small>
+          </article>
+          <article class="score-card">
+            <span>返回码</span>
+            <strong id="jobReturnCode">-</strong>
+            <small id="jobDuration">尚未执行</small>
+          </article>
+          <article class="score-card">
+            <span>产物</span>
+            <strong id="jobOutputApk">-</strong>
+            <small id="jobReportPath">-</small>
+          </article>
+        </div>
+        <div class="report-grid">
+          <section class="report-card">
+            <h3>执行状态</h3>
+            <div id="jobMetaList" class="stack-list"></div>
+          </section>
+          <section class="report-card">
+            <h3>执行日志</h3>
+            <pre id="jobLog" class="log-block">还没有任务。点击“开始加固”后，这里会显示本地 harden_apk.py 的输出。</pre>
+          </section>
+        </div>
+      </section>
+
+      <section class="panel gates-panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker">Step 4</p>
+            <h2>运行时门闩</h2>
+          </div>
+        </div>
+        <div class="gates" id="gatesFlow"></div>
+      </section>
+
+      <section class="panel report-panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker">Step 5</p>
+            <h2>报告查看</h2>
+          </div>
+          <div class="panel-actions">
+            <label class="action small upload-button">
+              导入 report.json
+              <input id="reportFile" type="file" accept=".json,application/json" hidden>
+            </label>
+            <button class="action small" id="loadSample" type="button">载入示例</button>
+          </div>
+        </div>
+
+        <div class="report-summary">
+          <article class="score-card">
+            <span>安全评分</span>
+            <strong id="scoreValue">96 / 100</strong>
+            <small id="gradeValue">A</small>
+          </article>
+          <article class="score-card">
+            <span>模式</span>
+            <strong id="modeValue">flutter</strong>
+            <small id="policyValue">block / strict</small>
+          </article>
+          <article class="score-card">
+            <span>DEX 覆盖</span>
+            <strong id="coverageValue">0.0%</strong>
+            <small id="coverageRole">secondary</small>
+          </article>
+          <article class="score-card">
+            <span>Native Core</span>
+            <strong id="nativeCoreValue">2 / 2</strong>
+            <small id="hookTargetsValue">agpcore, libapp.so, libflutter.so</small>
+          </article>
+        </div>
+
+        <div class="report-grid">
+          <section class="report-card">
+            <h3>控制项</h3>
+            <div id="controlsList" class="stack-list"></div>
+          </section>
+          <section class="report-card">
+            <h3>Native Core</h3>
+            <div id="nativeCoreList" class="stack-list"></div>
+          </section>
+          <section class="report-card">
+            <h3>Method Protection</h3>
+            <div id="methodStats" class="stack-list"></div>
+          </section>
+          <section class="report-card">
+            <h3>建议项</h3>
+            <div id="recommendationsList" class="stack-list"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <template id="gateTemplate">
+    <article class="gate-card">
+      <span class="gate-step"></span>
+      <h3></h3>
+      <p></p>
+    </article>
+  </template>
+
+  <script src="./js/utils.js"></script>
+  <script src="./js/api.js"></script>
+  <script src="./js/analyzer.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

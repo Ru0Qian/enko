@@ -1,0 +1,3 @@
+Lcom/enko/test/small/FlagChecker;->mixKey
+Lcom/enko/test/small/FlagChecker;->verifyHash
+Lcom/enko/test/small/FlagChecker;->expectedFlagHash

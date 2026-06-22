@@ -1,0 +1,14 @@
+{
+  "policy_version": "2026.03.06.1",
+  "profiles": {
+    "strict": {
+      "mode": "block"
+    },
+    "balanced": {
+      "mode": "block"
+    },
+    "compat": {
+      "mode": "log"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+# Full-open protection map for demo-app
+# Format: <method_spec> <level>
+# level: 0=none, 1=extract, 2=vmp, 3=dex2c
+
+# Extract (Phase 4.1)
+Lcom/example/demo/MainActivity;->onCreate(Landroid/os/Bundle;)V 1
+Lcom/example/demo/MainActivity;->runCryptoTest()V 1
+
+# VMP DEX (Phase 4.3)
+Lcom/example/demo/CryptoHelper;->encrypt(Ljava/lang/String;)Ljava/lang/String; 2
+Lcom/example/demo/CryptoHelper;->decrypt(Ljava/lang/String;)Ljava/lang/String; 2
+
+# DEX2C (Phase 4.2)
+Lcom/example/demo/LicenseManager;->isActivated()Z 3

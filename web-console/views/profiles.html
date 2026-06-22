@@ -1,0 +1,132 @@
+<section id="view-profiles" class="view-section">
+<div class="pt-24 px-8 pb-12 relative overflow-hidden">
+<!-- Abstract Background Glows -->
+<div class="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-primary/10 blur-[120px] rounded-full -z-10"></div>
+<div class="absolute bottom-[0%] left-[10%] w-[400px] h-[400px] bg-tertiary/5 blur-[100px] rounded-full -z-10"></div>
+<div class="max-w-6xl mx-auto">
+<!-- Header Section -->
+<div class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
+<div>
+<h2 class="text-4xl md:text-5xl font-bold font-headline tracking-tighter text-on-surface mb-2">配置方案管理</h2>
+<p class="text-on-surface-variant font-body">定义并管理您的 APK 加固策略。从内置方案快速开始，或根据业务需求自定义安全参数。</p>
+</div>
+<button id="createCustomProfile" class="flex items-center gap-2 px-6 py-4 bg-gradient-to-br from-primary to-primary-container text-on-primary-fixed font-bold rounded-xl shadow-[0_8px_25px_rgba(105,156,255,0.4)] hover:shadow-[0_12px_35px_rgba(105,156,255,0.6)] transition-all duration-300 group">
+<span class="material-symbols-outlined">add_circle</span>
+<span>创建自定义方案</span>
+</button>
+</div>
+<!-- Built-in Section Title -->
+<div class="flex items-center gap-4 mb-8">
+<div class="h-[1px] flex-grow bg-outline-variant/30"></div>
+<span class="font-headline text-xs uppercase tracking-[0.3em] text-on-surface-variant/80">内置方案</span>
+<div class="h-[1px] flex-grow bg-outline-variant/30"></div>
+</div>
+<!-- Profiles Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+<!-- Card 1: Flutter Production -->
+<div class="glass-card rounded-2xl p-6 border border-outline-variant/20 hover:border-primary/50 transition-all duration-500 group flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary text-3xl">flutter</span>
+</div>
+<span class="px-2 py-1 bg-secondary/10 text-secondary text-[10px] font-bold tracking-widest rounded uppercase">推荐</span>
+</div>
+<h3 class="text-2xl font-bold font-headline mb-2 text-white">Flutter 生产</h3>
+<p class="text-sm text-on-surface-variant mb-6 leading-relaxed">针对 Flutter 框架优化的生产环境加固方案。平衡了启动速度与代码混淆深度。</p>
+<div class="space-y-4 mb-8">
+<div class="flex items-center justify-between">
+<span class="text-xs font-label text-on-surface-variant">目标平台</span>
+<span class="text-sm font-medium text-on-surface">ARM64-v8a / v7a</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-xs font-label text-on-surface-variant">风险策略</span>
+<span class="text-sm font-medium text-secondary">高强度加固</span>
+</div>
+<div class="flex gap-2">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center" title="反调试">
+<span class="material-symbols-outlined text-xs text-on-surface-variant">bug_report</span>
+</div>
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center" title="完整性校验">
+<span class="material-symbols-outlined text-xs text-on-surface-variant">verified_user</span>
+</div>
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center" title="资产加密">
+<span class="material-symbols-outlined text-xs text-on-surface-variant">lock</span>
+</div>
+</div>
+</div>
+</div>
+<button data-profile="flutter_prod" class="w-full py-3 border border-outline-variant hover:bg-white/5 hover:border-white transition-all duration-300 rounded-xl flex items-center justify-center gap-2 text-sm font-medium profile-apply-btn">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+<span>复制并编辑</span>
+</button>
+</div>
+<!-- Card 2: Android Production -->
+<div class="glass-card rounded-2xl p-6 border border-outline-variant/20 hover:border-primary/50 transition-all duration-500 group flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-secondary/10 rounded-xl flex items-center justify-center border border-secondary/20">
+<span class="material-symbols-outlined text-secondary text-3xl">android</span>
+</div>
+</div>
+<h3 class="text-2xl font-bold font-headline mb-2 text-white">Android 生产</h3>
+<p class="text-sm text-on-surface-variant mb-6 leading-relaxed">通用 Android 应用生产环境加固。包括 DEX 虚拟化和全面的反调试保护。</p>
+<div class="space-y-4 mb-8">
+<div class="flex items-center justify-between">
+<span class="text-xs font-label text-on-surface-variant">目标平台</span>
+<span class="text-sm font-medium text-on-surface">多平台</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-xs font-label text-on-surface-variant">风险策略</span>
+<span class="text-sm font-medium text-secondary">极致安全</span>
+</div>
+<div class="flex gap-2">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center" title="DEX 虚拟化">
+<span class="material-symbols-outlined text-xs text-on-surface-variant">terminal</span>
+</div>
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center" title="Hook 防护">
+<span class="material-symbols-outlined text-xs text-on-surface-variant">security_update_good</span>
+</div>
+</div>
+</div>
+</div>
+<button data-profile="android_prod" class="w-full py-3 border border-outline-variant hover:bg-white/5 hover:border-white transition-all duration-300 rounded-xl flex items-center justify-center gap-2 text-sm font-medium profile-apply-btn">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+<span>复制并编辑</span>
+</button>
+</div>
+<!-- Card 3: Lab Debug -->
+<div class="glass-card rounded-2xl p-6 border border-outline-variant/20 hover:border-tertiary/50 transition-all duration-500 group flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-tertiary/10 rounded-xl flex items-center justify-center border border-tertiary/20">
+<span class="material-symbols-outlined text-tertiary text-3xl">biotech</span>
+</div>
+</div>
+<h3 class="text-2xl font-bold font-headline mb-2 text-white">实验室调试</h3>
+<p class="text-sm text-on-surface-variant mb-6 leading-relaxed">轻量级安全检查，允许调试器挂载。适用于内部测试和灰度环境。</p>
+<div class="space-y-4 mb-8">
+<div class="flex items-center justify-between">
+<span class="text-xs font-label text-on-surface-variant">目标平台</span>
+<span class="text-sm font-medium text-on-surface">开发环境</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-xs font-label text-on-surface-variant">风险策略</span>
+<span class="text-sm font-medium text-tertiary">宽松模式</span>
+</div>
+<div class="flex gap-2">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center" title="轻量混淆">
+<span class="material-symbols-outlined text-xs text-on-surface-variant">blur_on</span>
+</div>
+</div>
+</div>
+</div>
+<button data-profile="lab_debug" class="w-full py-3 border border-outline-variant hover:bg-white/5 hover:border-white transition-all duration-300 rounded-xl flex items-center justify-center gap-2 text-sm font-medium profile-apply-btn">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+<span>复制并编辑</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>

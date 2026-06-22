@@ -1,0 +1,4 @@
+Lcom/enko/test/small/FlagChecker;->recoverFlag
+Lcom/enko/test/small/FlagChecker;->deriveKey
+Lcom/enko/test/small/FlagChecker;->descramble
+Lcom/enko/test/small/MainActivity;->verifySubmittedFlag

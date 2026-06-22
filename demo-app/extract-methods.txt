@@ -1,0 +1,17 @@
+# Extract methods — all demo app methods
+Lcom/example/demo/MainActivity;->onCreate
+Lcom/example/demo/MainActivity;->runCryptoTest
+Lcom/example/demo/MainActivity;->runNetworkHashTest
+Lcom/example/demo/MainActivity;->updateStatus
+Lcom/example/demo/DemoApplication;->onCreate
+Lcom/example/demo/DemoService;->backgroundWork
+Lcom/example/demo/DemoService;->verifyCryptoIntegrity
+Lcom/example/demo/DemoService;->checkEnvironment
+Lcom/example/demo/SettingsActivity;->onCreate
+Lcom/example/demo/SettingsActivity;->runReflectionTest
+Lcom/example/demo/SettingsActivity;->dumpEnvironment
+Lcom/example/demo/SettingsActivity;->dumpThreads
+Lcom/example/demo/SettingsActivity;->dumpClassLoader
+Lcom/example/demo/BootReceiver;->onReceive
+Lcom/example/demo/DataProvider;->query
+Lcom/example/demo/DataProvider;->verifyCrypto
