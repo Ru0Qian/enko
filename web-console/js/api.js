@@ -119,10 +119,10 @@ function showLoginScreen() {
     <div class="modal-card">
       <div style="text-align:center;margin-bottom:24px;">
         <div style="width:48px;height:48px;margin:0 auto 12px;border-radius:12px;background:var(--c-gradient-primary);display:flex;align-items:center;justify-content:center;">
-          <span class="material-symbols-outlined" style="color:#000;font-size:28px;font-variation-settings:'FILL' 1;">security</span>
+          <span class="material-symbols-outlined" style="color:#10120f;font-size:28px;font-variation-settings:'FILL' 1;">encrypted</span>
         </div>
-        <h2>哨兵控制台</h2>
-        <p class="subtitle">APK 加固引擎</p>
+        <h2>Enko Forge</h2>
+        <p class="subtitle">APK 加固控制台</p>
       </div>
       <div id="login-error" class="modal-error"></div>
       <label>用户名</label>

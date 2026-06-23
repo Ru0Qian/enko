@@ -23,6 +23,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import asyncpg
 from fastapi import (
@@ -88,6 +89,9 @@ MAX_CONCURRENT = int(os.environ.get("ENKO_MAX_CONCURRENT_JOBS", "3"))
 UPLOAD_TTL_HOURS = int(os.environ.get("ENKO_UPLOAD_TTL_HOURS", "24"))
 JOB_TTL_DAYS = int(os.environ.get("ENKO_JOB_TTL_DAYS", "7"))
 PRODUCTION = os.environ.get("ENKO_PRODUCTION", "").lower() in ("true", "1", "yes")
+PUBLIC_API_REDACTION = os.environ.get("ENKO_PUBLIC_API_REDACTION", "true").lower() not in ("0", "false", "no")
+ENABLE_PUBLIC_DOCS = os.environ.get("ENKO_ENABLE_PUBLIC_DOCS", "").lower() in ("1", "true", "yes")
+MONITOR_TOKEN = os.environ.get("ENKO_MONITOR_TOKEN", "")
 
 # ---------------------------------------------------------------------------
 # Tier definitions — feature gates per user tier
@@ -127,12 +131,22 @@ TIER_LIMITS: dict[str, dict[str, Any]] = {
 
 # CORS: explicit origins in production; warn on wildcard
 _cors_env = os.environ.get("ENKO_CORS_ORIGINS", "")
-CORS_ORIGINS: list[str] = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else ["*"]
+CORS_ORIGINS: list[str] = (
+    [o.strip() for o in _cors_env.split(",") if o.strip()]
+    if _cors_env
+    else ([] if PUBLIC_API_REDACTION else ["*"])
+)
 if CORS_ORIGINS == ["*"]:
     logger.warning(
         "CORS allow_origins=['*'] — set ENKO_CORS_ORIGINS for production "
         "(e.g. ENKO_CORS_ORIGINS=https://console.example.com)"
     )
+ALLOWED_ORIGIN_HOSTS = {
+    parsed.netloc or origin
+    for origin in CORS_ORIGINS
+    for parsed in [urlparse(origin)]
+    if origin != "*"
+}
 
 # JWT secret: auto-generate if placeholder
 _jwt_secret_raw = os.environ.get("ENKO_JWT_SECRET", "CHANGE_ME_TO_A_RANDOM_64_CHAR_HEX_STRING")
@@ -167,6 +181,192 @@ _RATE_WINDOW = 60
 _RATE_MAX = 5
 _UPLOAD_RATE_WINDOW = 3600  # 1 hour
 _UPLOAD_RATE_MAX = 30       # 30 uploads/hour per IP
+
+def _public_path_label(value: Any) -> str:
+    if not value:
+        return ""
+    try:
+        return Path(str(value)).name or "artifact"
+    except Exception:
+        return "artifact"
+
+_PUBLIC_UPLOAD_PREFIX = "enko://upload/"
+_PUBLIC_MAP_PREFIX = "enko://map/"
+_PUBLIC_SHELL_DEFAULT = "enko://shell/default"
+
+def _safe_child_path(root: Path, name: str) -> Path:
+    root_resolved = root.resolve()
+    candidate = (root_resolved / Path(name).name).resolve()
+    try:
+        candidate.relative_to(root_resolved)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "文件凭证无效，请重新上传。", "error_code": "INVALID_FILE_REF"},
+        )
+    return candidate
+
+def _public_file_ref(prefix: str, path: Path) -> str:
+    return f"{prefix}{Path(path).name}"
+
+def _resolve_public_ref(value: Any, *, expected: str) -> str:
+    text = str(value or "").strip()
+    if not text or not PUBLIC_API_REDACTION:
+        return text
+
+    if expected == "upload" and text.startswith(_PUBLIC_UPLOAD_PREFIX):
+        path = _safe_child_path(UPLOAD_ROOT, text[len(_PUBLIC_UPLOAD_PREFIX):])
+        if not path.exists():
+            raise HTTPException(status_code=400, detail={"message": "APK 文件不存在，请重新上传。", "error_code": "APK_NOT_FOUND"})
+        return str(path)
+
+    if expected == "map" and text.startswith(_PUBLIC_MAP_PREFIX):
+        path = _safe_child_path(REPO_ROOT / "output", text[len(_PUBLIC_MAP_PREFIX):])
+        if not path.exists():
+            raise HTTPException(status_code=400, detail={"message": "保护映射不存在，请重新生成。", "error_code": "MAP_NOT_FOUND"})
+        return str(path)
+
+    if expected == "shell" and text == _PUBLIC_SHELL_DEFAULT:
+        default_shell = find_default_shell_apk()
+        return str(default_shell) if default_shell else ""
+
+    if text.startswith("enko://"):
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "文件凭证类型不匹配，请重新上传。", "error_code": "INVALID_FILE_REF"},
+        )
+
+    raise HTTPException(
+        status_code=400,
+        detail={"message": "公开接口不接受服务器路径，请通过控制台上传文件。", "error_code": "RAW_PATH_REJECTED"},
+    )
+
+def _normalize_public_job_config(config: dict[str, Any]) -> dict[str, Any]:
+    if not PUBLIC_API_REDACTION:
+        return config
+
+    safe = dict(config)
+    safe["inputApk"] = _resolve_public_ref(safe.get("inputApk"), expected="upload")
+    if safe.get("protectionMap"):
+        safe["protectionMap"] = _resolve_public_ref(safe.get("protectionMap"), expected="map")
+
+    # Public users should not be able to point the build process at arbitrary
+    # server files. These fields are generated or discovered inside the server.
+    safe["shellApk"] = ""
+    safe["outputApk"] = ""
+    safe["reportJsonPath"] = ""
+    safe["ndkPath"] = "<auto-detected>"
+    safe["dex2cOllvmClang"] = ""
+    safe["releaseManifestPath"] = ""
+    safe["keystorePath"] = ""
+    safe["ksPass"] = ""
+    safe["keyPass"] = ""
+
+    if safe.get("signingEnabled"):
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "公开版暂不支持路径式签名证书，请使用服务端托管签名方案。", "error_code": "PUBLIC_SIGNING_DISABLED"},
+        )
+
+    return safe
+
+_PUBLIC_GENERIC_ERROR = "任务失败，请检查输入文件或联系支持。"
+_PATH_TEXT_RE = re.compile(r"([A-Za-z]:[\\/][^\s\"']+|/(?:[^/\s\"']+/)+[^\s\"']+)")
+_SENSITIVE_REPORT_KEY_PARTS = (
+    "path",
+    "apk",
+    "keystore",
+    "tool",
+    "command",
+    "cmd",
+    "cwd",
+    "manifest",
+)
+
+def _redact_public_text(value: str) -> str:
+    text = value
+    for raw in (str(REPO_ROOT), str(WEB_ROOT), str(JOB_ROOT), str(UPLOAD_ROOT)):
+        if raw:
+            text = text.replace(raw, "[redacted-path]")
+    text = _PATH_TEXT_RE.sub("[redacted-path]", text)
+    return text
+
+def _public_report_snapshot(value: Any) -> Any:
+    if not PUBLIC_API_REDACTION:
+        return value
+    if isinstance(value, dict):
+        result: dict[str, Any] = {}
+        for key, item in value.items():
+            lower = str(key).lower()
+            if any(part in lower for part in _SENSITIVE_REPORT_KEY_PARTS):
+                continue
+            result[str(key)] = _public_report_snapshot(item)
+        return result
+    if isinstance(value, list):
+        return [_public_report_snapshot(item) for item in value]
+    if isinstance(value, str):
+        return _redact_public_text(value)
+    return value
+
+def _job_owner(job: dict[str, Any]) -> str:
+    return str(job.get("owner") or job.get("_username") or "").strip()
+
+def _can_access_job(job: dict[str, Any], username: str) -> bool:
+    if username == ADMIN_USER:
+        return True
+    owner = _job_owner(job)
+    return bool(owner and owner == username)
+
+def _require_job_access(job_id: str, username: str) -> dict[str, Any]:
+    with JOBS_LOCK:
+        if job_id not in JOBS:
+            raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
+        job = JOBS[job_id]
+        if not _can_access_job(job, username):
+            raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
+        return dict(job)
+
+def public_job_snapshot(job: dict[str, Any]) -> dict[str, Any]:
+    """Return a public-safe job payload without server paths, commands, or logs."""
+    if not PUBLIC_API_REDACTION:
+        return job
+    allowed = {
+        "id",
+        "status",
+        "created_at",
+        "started_at",
+        "finished_at",
+        "returncode",
+        "return_code",
+        "progress",
+        "progress_label",
+        "error",
+        "report_score",
+        "report_max_score",
+        "report_grade",
+        "report_compiled",
+        "features",
+        "filtered_counts",
+        "min_score_requested",
+        "min_score_effective",
+        "output_exists",
+        "report_exists",
+        "report",
+    }
+    result = {key: value for key, value in job.items() if key in allowed}
+    if "input_apk" in job:
+        result["input_apk"] = _public_path_label(job.get("input_apk"))
+    if "output_apk" in job:
+        result["output_apk"] = _public_path_label(job.get("output_apk"))
+    if "report_json" in job:
+        result["report_json"] = _public_path_label(job.get("report_json"))
+    if "report" in result:
+        result["report"] = _public_report_snapshot(result.get("report"))
+    if "report_compiled" in result:
+        result["report_compiled"] = _public_report_snapshot(result.get("report_compiled"))
+    if result.get("error"):
+        result["error"] = _PUBLIC_GENERIC_ERROR
+    return result
 
 def _check_rate_limit(ip: str) -> None:
     now = time.monotonic()
@@ -505,7 +705,7 @@ async def _load_jobs_from_db() -> None:
     try:
         async with _db_pool.acquire() as conn:
             rows = await conn.fetch("""
-                SELECT id, status, command_preview, output_apk, report_json,
+                SELECT id, status, config, command_preview, output_apk, report_json,
                        report_score, report_max_score, report_grade, report_compiled,
                        features, resolved_tools, resolved_ndk, filtered_counts,
                        min_score_requested, min_score_effective,
@@ -534,8 +734,11 @@ async def _load_jobs_from_db() -> None:
                         return json.loads(val)
                     except Exception:
                         return None
+                stored_config = _parse_json(row["config"]) if isinstance(row["config"], str) else (row["config"] or {})
+                owner = str(stored_config.get("_username", "")).strip() if isinstance(stored_config, dict) else ""
                 job = {
                     "id": job_id,
+                    "owner": owner,
                     "status": status,
                     "command_preview": row["command_preview"] or "",
                     "output_apk": row["output_apk"] or "",
@@ -569,29 +772,49 @@ async def _load_jobs_from_db() -> None:
 # ---------------------------------------------------------------------------
 # Stats cache — avoid expensive COUNT(*) on every request
 # ---------------------------------------------------------------------------
-_stats_cache: dict[str, Any] = {}
-_stats_cache_time: float = 0.0
+_stats_cache: dict[str, dict[str, Any]] = {}
+_stats_cache_time: dict[str, float] = {}
 _STATS_CACHE_TTL = 60  # seconds
 
-async def db_get_stats() -> dict[str, Any]:
+async def db_get_stats(username: str = "") -> dict[str, Any]:
     global _stats_cache, _stats_cache_time
     now = time.monotonic()
-    if _stats_cache and (now - _stats_cache_time) < _STATS_CACHE_TTL:
-        return _stats_cache
+    cache_key = "__admin__" if username == ADMIN_USER else username
+    if cache_key in _stats_cache and (now - _stats_cache_time.get(cache_key, 0.0)) < _STATS_CACHE_TTL:
+        return _stats_cache[cache_key]
     assert _db_pool
     async with _db_pool.acquire() as conn:
-        total = await conn.fetchval("SELECT COUNT(*) FROM jobs")
-        succeeded = await conn.fetchval("SELECT COUNT(*) FROM jobs WHERE status='succeeded'")
-        failed = await conn.fetchval("SELECT COUNT(*) FROM jobs WHERE status='failed'")
-        avg_score = await conn.fetchval("SELECT AVG(report_score) FROM jobs WHERE report_score IS NOT NULL")
+        owner_clause = "" if username == ADMIN_USER else "config->>'_username'=$1"
+
+        def where_clause(extra: str = "") -> str:
+            clauses = [clause for clause in (owner_clause, extra) if clause]
+            return f" WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        def args(*extra: Any) -> tuple[Any, ...]:
+            return (() if username == ADMIN_USER else (username,)) + extra
+
+        today_param = "$1" if username == ADMIN_USER else "$2"
+        succeeded_filter = "status='succeeded'"
+        failed_filter = "status='failed'"
+        today_filter = f"created_at >= {today_param}"
+        today_succeeded_filter = f"status='succeeded' AND created_at >= {today_param}"
+        today_running_filter = f"status='running' AND created_at >= {today_param}"
+        total = await conn.fetchval(f"SELECT COUNT(*) FROM jobs{where_clause()}", *args())
+        succeeded = await conn.fetchval(f"SELECT COUNT(*) FROM jobs{where_clause(succeeded_filter)}", *args())
+        failed = await conn.fetchval(f"SELECT COUNT(*) FROM jobs{where_clause(failed_filter)}", *args())
+        avg_score = await conn.fetchval(f"SELECT AVG(report_score) FROM jobs{where_clause('report_score IS NOT NULL')}", *args())
         today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        today_jobs = await conn.fetchval("SELECT COUNT(*) FROM jobs WHERE created_at >= $1", today)
-        today_succeeded = await conn.fetchval("SELECT COUNT(*) FROM jobs WHERE status='succeeded' AND created_at >= $1", today)
-        today_running = await conn.fetchval("SELECT COUNT(*) FROM jobs WHERE status='running' AND created_at >= $1", today)
-        grades = await conn.fetch("SELECT report_grade, COUNT(*) as cnt FROM jobs WHERE report_grade IS NOT NULL GROUP BY report_grade")
+        today_jobs = await conn.fetchval(f"SELECT COUNT(*) FROM jobs{where_clause(today_filter)}", *args(today))
+        today_succeeded = await conn.fetchval(f"SELECT COUNT(*) FROM jobs{where_clause(today_succeeded_filter)}", *args(today))
+        today_running = await conn.fetchval(f"SELECT COUNT(*) FROM jobs{where_clause(today_running_filter)}", *args(today))
+        grades = await conn.fetch(
+            f"SELECT report_grade, COUNT(*) as cnt FROM jobs{where_clause('report_grade IS NOT NULL')} GROUP BY report_grade",
+            *args(),
+        )
         grade_dist = {r["report_grade"]: r["cnt"] for r in grades}
         recent = await conn.fetch(
-            "SELECT id, status, report_score, report_grade, created_at, finished_at FROM jobs ORDER BY created_at DESC LIMIT 10"
+            f"SELECT id, status, report_score, report_grade, created_at, finished_at FROM jobs{where_clause()} ORDER BY created_at DESC LIMIT 10",
+            *args(),
         )
         recent_list = [
             {
@@ -611,14 +834,13 @@ async def db_get_stats() -> dict[str, Any]:
         "grade_distribution": grade_dist,
         "recent_jobs": recent_list,
     }
-    _stats_cache = result
-    _stats_cache_time = now
+    _stats_cache[cache_key] = result
+    _stats_cache_time[cache_key] = now
     return result
 
 
 def invalidate_stats_cache() -> None:
-    global _stats_cache_time
-    _stats_cache_time = 0.0
+    _stats_cache_time.clear()
 
 # ---------------------------------------------------------------------------
 # WebSocket hub — broadcast job updates
@@ -680,19 +902,21 @@ def append_job_log_enhanced(job_id: str, line: str) -> None:
     _orig_append_log(job_id, line)
     _fire_async(db_append_log(job_id, line))
     progress = detect_progress(line)
-    msg: dict[str, Any] = {"type": "log", "line": line.rstrip()}
     if progress:
         pct, label = progress
-        msg["progress"] = pct
-        msg["progress_label"] = label
         _orig_update_job(job_id, progress=pct, progress_label=label)
         _fire_async(db_update_job(job_id, progress=pct, progress_label=label))
-    _fire_async(ws_broadcast(job_id, msg))
+        _fire_async(ws_broadcast(job_id, {"type": "status", "progress": pct, "progress_label": label}))
+    elif not PUBLIC_API_REDACTION:
+        _fire_async(ws_broadcast(job_id, {"type": "log", "line": line}))
 
 def update_job_enhanced(job_id: str, **updates: Any) -> None:
     _orig_update_job(job_id, **updates)
     _fire_async(db_update_job(job_id, **updates))
-    _fire_async(ws_broadcast(job_id, {"type": "status", **{k: v for k, v in updates.items() if k != "log"}}))
+    public_updates = {k: v for k, v in updates.items() if k != "log"}
+    if PUBLIC_API_REDACTION and public_updates.get("error"):
+        public_updates["error"] = _PUBLIC_GENERIC_ERROR
+    _fire_async(ws_broadcast(job_id, {"type": "status", **public_updates}))
 
 import common as _common_mod  # noqa: E402
 _common_mod.append_job_log = append_job_log_enhanced
@@ -727,6 +951,8 @@ def create_job_with_db(config: dict[str, Any], username: str = "", tier: str = "
         from common import create_job as _orig_create_job
         job = _orig_create_job(config)
         job_created = True
+        job["owner"] = username
+        _orig_update_job(job["id"], owner=username)
         _fire_async(db_insert_job(job, config))
         return job
     except Exception:
@@ -813,7 +1039,13 @@ async def lifespan(app: FastAPI):  # type: ignore[override]
 # ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
-app = FastAPI(title="Enko Sentinel Console", docs_url="/docs", redoc_url="/redoc", lifespan=lifespan)
+app = FastAPI(
+    title="Enko Sentinel Console",
+    docs_url=None if PUBLIC_API_REDACTION and not ENABLE_PUBLIC_DOCS else "/docs",
+    redoc_url=None if PUBLIC_API_REDACTION and not ENABLE_PUBLIC_DOCS else "/redoc",
+    openapi_url=None if PUBLIC_API_REDACTION and not ENABLE_PUBLIC_DOCS else "/openapi.json",
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -851,9 +1083,8 @@ async def csrf_protection(request: Request, call_next):
         host = request.headers.get("host", "")
         # Allow requests with no origin (same-site forms, curl, etc.)
         if origin and host:
-            from urllib.parse import urlparse
             origin_host = urlparse(origin).netloc
-            if origin_host and origin_host != host and origin_host not in CORS_ORIGINS:
+            if origin_host and origin_host != host and origin_host not in ALLOWED_ORIGIN_HOSTS:
                 logger.warning("CSRF blocked: origin=%s host=%s", origin, host)
                 return JSONResponse(status_code=403, content={"detail": "Cross-origin request blocked"})
     return await call_next(request)
@@ -900,6 +1131,14 @@ def verify_token_from_qs(token: str) -> str:
         return payload.get("sub", "")
     except JWTError:
         return ""
+
+def verify_monitor_access(request: Request) -> None:
+    if not PUBLIC_API_REDACTION:
+        return
+    auth_header = request.headers.get("Authorization", "")
+    if MONITOR_TOKEN and auth_header == f"Bearer {MONITOR_TOKEN}":
+        return
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="monitor token required")
 
 # ---------------------------------------------------------------------------
 # Auth endpoints
@@ -1023,12 +1262,16 @@ async def tier_info(username: str = Depends(verify_token)):
 @app.get("/api/health")
 async def health(username: str = Depends(verify_token)):
     default_shell = find_default_shell_apk()
+    defaults = discover_environment_defaults()
     return {
         "ok": True,
-        "root": str(REPO_ROOT),
-        "defaults": discover_environment_defaults(),
+        "root": "" if PUBLIC_API_REDACTION else str(REPO_ROOT),
+        "defaults": {
+            key: ("configured" if value else "")
+            for key, value in defaults.items()
+        } if PUBLIC_API_REDACTION else defaults,
         "shellApkAvailable": default_shell is not None,
-        "defaultShellApk": str(default_shell) if default_shell else "",
+        "defaultShellApk": "" if PUBLIC_API_REDACTION else (str(default_shell) if default_shell else ""),
         "username": username,
         "db_connected": _db_pool is not None,
         "version": "2.2.0",
@@ -1036,8 +1279,9 @@ async def health(username: str = Depends(verify_token)):
     }
 
 @app.get("/api/health/deep")
-async def health_deep():
-    """Deep health check — no auth required (for monitoring/probes)."""
+async def health_deep(request: Request):
+    """Deep health check for authenticated operators or monitor token holders."""
+    verify_monitor_access(request)
     checks: dict[str, Any] = {"timestamp": datetime.now(timezone.utc).isoformat()}
 
     # DB connectivity
@@ -1047,9 +1291,9 @@ async def health_deep():
                 row = await conn.fetchval("SELECT 1")
             checks["database"] = {"ok": True}
         else:
-            checks["database"] = {"ok": False, "error": "pool not initialized"}
+            checks["database"] = {"ok": False, "error": "unavailable" if PUBLIC_API_REDACTION else "pool not initialized"}
     except Exception as exc:
-        checks["database"] = {"ok": False, "error": str(exc)}
+        checks["database"] = {"ok": False, "error": "unavailable" if PUBLIC_API_REDACTION else str(exc)}
 
     # File system writable
     try:
@@ -1060,7 +1304,7 @@ async def health_deep():
         test_file.unlink()
         checks["filesystem"] = {"ok": True}
     except Exception as exc:
-        checks["filesystem"] = {"ok": False, "error": str(exc)}
+        checks["filesystem"] = {"ok": False, "error": "unavailable" if PUBLIC_API_REDACTION else str(exc)}
 
     # Packer available
     packer_ok = (REPO_ROOT / "packer" / "harden_apk.py").exists()
@@ -1071,8 +1315,9 @@ async def health_deep():
     return JSONResponse(content=checks, status_code=status_code)
 
 @app.get("/api/metrics")
-async def metrics():
-    """Prometheus text exposition format metrics — no auth (for monitoring probes)."""
+async def metrics(request: Request):
+    """Prometheus text exposition format metrics for authenticated monitoring."""
+    verify_monitor_access(request)
     lines = ["# HELP enko_http_requests_total HTTP requests by method, path, status"]
     lines.append("# TYPE enko_http_requests_total counter")
     for (method, path, status), count in sorted(_metrics_requests.items()):
@@ -1098,7 +1343,7 @@ async def stats(username: str = Depends(verify_token)):
         return {"total_jobs": 0, "succeeded": 0, "failed": 0, "avg_score": None,
                 "today_jobs": 0, "today_succeeded": 0, "today_running": 0,
                 "success_rate": 0, "grade_distribution": {}, "recent_jobs": []}
-    return await db_get_stats()
+    return await db_get_stats(username)
 
 @app.post("/api/upload")
 async def upload_apk(request: Request, file: UploadFile = File(...), username: str = Depends(verify_token)):
@@ -1109,10 +1354,11 @@ async def upload_apk(request: Request, file: UploadFile = File(...), username: s
     if len(content) == 0:
         raise HTTPException(status_code=400, detail={"message": "文件为空", "error_code": "EMPTY_FILE"})
     sanitized = Path(file.filename).name
-    unique_name = f"{uuid.uuid4().hex[:8]}_{sanitized}"
+    unique_name = f"{uuid.uuid4().hex}_{sanitized}"
     save_path = UPLOAD_ROOT / unique_name
     save_path.write_bytes(content)
-    return {"ok": True, "path": str(save_path), "filename": sanitized, "size": len(content)}
+    public_path = _public_file_ref(_PUBLIC_UPLOAD_PREFIX, save_path) if PUBLIC_API_REDACTION else str(save_path)
+    return {"ok": True, "path": public_path, "filename": sanitized, "size": len(content)}
 
 # ---------------------------------------------------------------------------
 # APK Method Analysis — protection map generation
@@ -1126,7 +1372,7 @@ async def analyze_methods(request: Request, username: str = Depends(verify_token
     if not TIER_LIMITS.get(tier, TIER_LIMITS["free"])["allow_analyze_methods"]:
         raise HTTPException(status_code=403, detail={"message": "智能方法分析为专业版功能", "error_code": "TIER_RESTRICTED"})
     payload = await request.json()
-    apk_path_str = payload.get("apk_path", "")
+    apk_path_str = _resolve_public_ref(payload.get("apk_path", ""), expected="upload")
     flutter_mode = payload.get("flutter_mode", False)
     vmp_count = payload.get("vmp_count")
     dex2c_count = payload.get("dex2c_count")
@@ -1256,7 +1502,8 @@ async def analyze_methods(request: Request, username: str = Depends(verify_token
         return await asyncio.to_thread(_do_analysis)
     except Exception as exc:
         logger.exception("analyze-methods failed")
-        raise HTTPException(status_code=500, detail={"message": f"分析失败: {exc}", "error_code": "ANALYZE_FAILED"})
+        message = "分析失败，请检查 APK 或稍后重试。" if PUBLIC_API_REDACTION else f"分析失败: {exc}"
+        raise HTTPException(status_code=500, detail={"message": message, "error_code": "ANALYZE_FAILED"})
 
 @app.post("/api/save-protection-map")
 async def save_protection_map(request: Request, username: str = Depends(verify_token)):
@@ -1278,15 +1525,20 @@ async def save_protection_map(request: Request, username: str = Depends(verify_t
 
     uploads_dir = REPO_ROOT / "output"
     uploads_dir.mkdir(parents=True, exist_ok=True)
-    map_path = uploads_dir / f"protection-map-{uuid.uuid4().hex[:8]}.txt"
+    map_path = uploads_dir / f"protection-map-{uuid.uuid4().hex}.txt"
     map_path.write_text(map_content, encoding="utf-8")
-    return {"ok": True, "path": str(map_path)}
+    public_path = _public_file_ref(_PUBLIC_MAP_PREFIX, map_path) if PUBLIC_API_REDACTION else str(map_path)
+    return {"ok": True, "path": public_path}
 
 @app.get("/api/jobs")
 async def list_jobs(username: str = Depends(verify_token)):
     with JOBS_LOCK:
         job_ids = list(JOBS.keys())
-    jobs = [snapshot_job(jid) for jid in job_ids]
+    jobs = []
+    for jid in job_ids:
+        snapshot = snapshot_job(jid)
+        if _can_access_job(snapshot, username):
+            jobs.append(public_job_snapshot(snapshot))
     jobs.sort(key=lambda j: j.get("created_at") or "", reverse=True)
     return {"jobs": jobs}
 
@@ -1308,17 +1560,19 @@ async def create_job_endpoint(request: Request, username: str = Depends(verify_t
             )
 
     try:
-        job = create_job_with_db(payload, username=username, tier=tier)
-        return {"job": job}
+        job = create_job_with_db(_normalize_public_job_config(payload), username=username, tier=tier)
+        return {"job": public_job_snapshot(job)}
     except HTTPException:
         raise
     except Exception as exc:
+        if PUBLIC_API_REDACTION:
+            raise HTTPException(status_code=400, detail={"message": "任务创建失败，请检查配置或联系支持。", "error_code": "JOB_CREATE_FAILED"})
         raise HTTPException(status_code=400, detail=str(exc))
 
 @app.get("/api/jobs/{job_id}")
 async def get_job(job_id: str, username: str = Depends(verify_token)):
     with JOBS_LOCK:
-        if job_id not in JOBS:
+        if job_id not in JOBS or not _can_access_job(JOBS[job_id], username):
             raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
         has_log = bool(JOBS[job_id].get("log"))
     # Lazy-load logs from DB for restored jobs
@@ -1333,17 +1587,14 @@ async def get_job(job_id: str, username: str = Depends(verify_token)):
                         JOBS[job_id]["log"] = [r["line"] for r in rows]
         except Exception:
             logger.debug("Failed to lazy-load logs for job %s", job_id)
-    return {"job": snapshot_job(job_id)}
+    return {"job": public_job_snapshot(snapshot_job(job_id))}
 
 _dl_tokens: dict[str, tuple[str, float]] = {}  # token -> (job_id, expires_at)
 
 @app.post("/api/jobs/{job_id}/download-token")
 async def create_download_token(job_id: str, username: str = Depends(verify_token)):
     """Create a short-lived one-time download token for direct browser download."""
-    with JOBS_LOCK:
-        if job_id not in JOBS:
-            raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
-        job = JOBS[job_id]
+    job = _require_job_access(job_id, username)
     output_apk = job.get("output_apk", "")
     if not output_apk or not Path(output_apk).exists():
         raise HTTPException(status_code=404, detail="output APK not available")
@@ -1365,7 +1616,8 @@ async def download_job(job_id: str, dl_token: str | None = None, request: Reques
         if not entry or entry[0] != job_id or entry[1] < time.time():
             raise HTTPException(status_code=403, detail="下载链接已过期或无效")
     else:
-        verify_token(request)  # raises 401 if invalid
+        username = verify_token(request)  # raises 401 if invalid
+        _require_job_access(job_id, username)
     with JOBS_LOCK:
         if job_id not in JOBS:
             raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
@@ -1387,7 +1639,7 @@ async def delete_job(job_id: str, username: str = Depends(verify_token)):
     """Delete a completed/failed job from memory and database."""
     with JOBS_LOCK:
         job = JOBS.get(job_id)
-        if not job:
+        if not job or not _can_access_job(job, username):
             raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
         if job.get("status") in ("running", "queued"):
             raise HTTPException(status_code=409, detail="无法删除运行中或排队中的任务")
@@ -1430,6 +1682,10 @@ async def job_websocket(websocket: WebSocket, job_id: str, token: str = Query(""
     if not username:
         await websocket.close(code=4001, reason="unauthorized")
         return
+    with JOBS_LOCK:
+        if job_id not in JOBS or not _can_access_job(JOBS[job_id], username):
+            await websocket.close(code=4004, reason="unknown job")
+            return
     await websocket.accept()
     _ws_clients[job_id].add(websocket)
     try:
@@ -1437,8 +1693,9 @@ async def job_websocket(websocket: WebSocket, job_id: str, token: str = Query(""
         with JOBS_LOCK:
             if job_id in JOBS:
                 j = JOBS[job_id]
-                for line in j.get("log", []):
-                    await websocket.send_text(json.dumps({"type": "log", "line": line}))
+                if not PUBLIC_API_REDACTION:
+                    for line in j.get("log", []):
+                        await websocket.send_text(json.dumps({"type": "log", "line": line}))
                 await websocket.send_text(json.dumps({
                     "type": "status", "status": j.get("status"),
                     "progress": j.get("progress", 0),
@@ -1458,12 +1715,62 @@ async def job_websocket(websocket: WebSocket, job_id: str, token: str = Query(""
 # ---------------------------------------------------------------------------
 # Static files & SPA fallback
 # ---------------------------------------------------------------------------
-app.mount("/static", StaticFiles(directory=str(WEB_ROOT)), name="static")
+REACT_ROOT = WEB_ROOT / "react-dist"
+
+def _static_file(root: Path, requested: str) -> Path | None:
+    try:
+        root_resolved = root.resolve()
+        candidate = (root_resolved / requested).resolve()
+        candidate.relative_to(root_resolved)
+    except Exception:
+        return None
+    return candidate if candidate.is_file() else None
+
+def _react_index_response() -> HTMLResponse:
+    index = REACT_ROOT / "index.html"
+    if index.exists():
+        return HTMLResponse(index.read_text(encoding="utf-8"))
+    raise HTTPException(status_code=404, detail="react build not found")
+
+def _react_asset_response(full_path: str):
+    file_path = _static_file(REACT_ROOT, full_path)
+    if file_path:
+        return FileResponse(file_path)
+    if full_path.startswith("assets/"):
+        raise HTTPException(status_code=404, detail="asset not found")
+    return _react_index_response()
+
+if PUBLIC_API_REDACTION:
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(REACT_ROOT / "assets"), check_dir=False),
+        name="react-assets",
+    )
+else:
+    app.mount("/static", StaticFiles(directory=str(WEB_ROOT)), name="static")
+
+@app.get("/react")
+@app.get("/react/{full_path:path}")
+async def react_spa(full_path: str = ""):
+    return _react_asset_response(full_path)
 
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str):
-    file_path = WEB_ROOT / full_path
-    if full_path and file_path.is_file():
+    if PUBLIC_API_REDACTION:
+        if full_path in {"docs", "redoc", "openapi.json"}:
+            raise HTTPException(status_code=404, detail="not found")
+        if full_path.startswith(("static/", "js/", "css/")) or full_path in {
+            "app.js",
+            "index.html",
+            "redesign.css",
+            "server.py",
+            "server_prod.py",
+        }:
+            raise HTTPException(status_code=404, detail="not found")
+        return _react_asset_response(full_path)
+
+    file_path = _static_file(WEB_ROOT, full_path)
+    if file_path:
         return FileResponse(file_path)
     index = WEB_ROOT / "index.html"
     if index.exists():

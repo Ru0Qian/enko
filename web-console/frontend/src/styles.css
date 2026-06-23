@@ -1,0 +1,482 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f7f8fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+.boot-screen,
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background:
+    linear-gradient(90deg, rgba(37, 99, 235, 0.05) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(37, 99, 235, 0.05) 1px, transparent 1px),
+    #f7f8fb;
+  background-size: 36px 36px;
+}
+
+.boot-screen {
+  display: flex;
+  gap: 12px;
+  color: #2563eb;
+  font-weight: 800;
+}
+
+.login-panel {
+  width: min(440px, calc(100vw - 32px));
+  padding: 32px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.12);
+}
+
+.brand-lock,
+.brand-mark {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+}
+
+.brand-lock {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+}
+
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 12px;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-drawer .brand {
+  min-height: 80px;
+  padding: 18px;
+}
+
+.app-main {
+  min-height: 100vh;
+  transition: margin-left 0.18s ease;
+}
+
+.app-header {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+  backdrop-filter: blur(18px);
+}
+
+.global-search {
+  width: 310px;
+  margin-right: 12px !important;
+}
+
+.engine-chip {
+  margin-right: 6px;
+}
+
+.app-content {
+  width: 100%;
+  max-width: 1720px;
+  padding: 24px;
+}
+
+.page-masthead {
+  margin-bottom: 18px;
+  padding: 18px;
+  border-color: rgba(148, 163, 184, 0.26) !important;
+  background:
+    linear-gradient(180deg, rgba(37, 99, 235, 0.035), transparent),
+    rgba(255, 255, 255, 0.88);
+}
+
+.masthead-icon {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.masthead-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signal-strip {
+  padding: 12px 14px;
+  border-color: rgba(148, 163, 184, 0.26) !important;
+}
+
+.surface-card {
+  padding: 18px;
+  border-color: rgba(148, 163, 184, 0.26) !important;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.045);
+}
+
+.metric-card {
+  padding: 18px;
+  min-width: 0;
+  border-color: rgba(148, 163, 184, 0.26) !important;
+}
+
+.metric-icon {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+}
+
+.metric-primary {
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.metric-success {
+  color: #16a34a;
+  background: rgba(22, 163, 74, 0.1);
+}
+
+.metric-warning {
+  color: #d97706;
+  background: rgba(217, 119, 6, 0.12);
+}
+
+.metric-info {
+  color: #0891b2;
+  background: rgba(8, 145, 178, 0.1);
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.metrics-grid.compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dashboard-grid,
+.reports-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.85fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.job-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 372px;
+  gap: 18px;
+  align-items: start;
+}
+
+.job-main {
+  min-width: 0;
+}
+
+.job-rail {
+  position: sticky;
+  top: 88px;
+  min-width: 0;
+}
+
+.compose-grid,
+.risk-grid,
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr);
+  gap: 16px;
+}
+
+.feature-grid,
+.profiles-grid,
+.mini-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.feature-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.two-column {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.four-column {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.option-card,
+.profile-card {
+  padding: 14px;
+  min-width: 0;
+  border-color: rgba(148, 163, 184, 0.24) !important;
+}
+
+.profile-card {
+  min-height: 260px;
+}
+
+.profile-button {
+  justify-content: space-between !important;
+  min-height: 74px;
+  padding: 12px 14px !important;
+  color: inherit !important;
+  border: 1px solid rgba(148, 163, 184, 0.24) !important;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+}
+
+.accordion-button {
+  justify-content: space-between !important;
+  color: inherit !important;
+  border: 1px solid rgba(148, 163, 184, 0.24) !important;
+}
+
+.file-dropzone {
+  min-height: 210px;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 26px;
+  text-align: center;
+  border: 1px dashed rgba(37, 99, 235, 0.36);
+  border-radius: 10px;
+  background: rgba(37, 99, 235, 0.035);
+  cursor: pointer;
+}
+
+.empty-state {
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: #64748b;
+}
+
+.table-shell {
+  width: 100%;
+  overflow-x: auto;
+  border-color: rgba(148, 163, 184, 0.24) !important;
+}
+
+.clickable-row {
+  cursor: pointer;
+}
+
+.mono-line {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace !important;
+  font-size: 12px !important;
+}
+
+.code-panel {
+  max-height: 320px;
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  border-radius: 8px;
+  color: #dbeafe;
+  background: #020617;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.report-json {
+  max-height: 460px;
+}
+
+.score-ring {
+  width: 172px;
+  height: 172px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  border-radius: 999px;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.85), rgba(37, 99, 235, 0.08));
+  border: 1px solid rgba(37, 99, 235, 0.18);
+}
+
+.mobile-nav {
+  display: none;
+}
+
+@media (max-width: 1380px) {
+  .metrics-grid,
+  .mini-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .feature-grid,
+  .profiles-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .job-workbench,
+  .dashboard-grid,
+  .reports-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .job-rail {
+    position: static;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-main {
+    margin-left: 84px !important;
+  }
+
+  .app-content {
+    padding: 16px;
+  }
+
+  .masthead-main {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+  }
+
+  .global-search,
+  .engine-chip,
+  .username-label {
+    display: none !important;
+  }
+
+  .compose-grid,
+  .risk-grid,
+  .admin-grid,
+  .two-column,
+  .four-column {
+    grid-template-columns: 1fr;
+  }
+
+  .hide-md {
+    display: none !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .app-main {
+    margin-left: 0 !important;
+  }
+
+  .app-drawer {
+    display: none;
+  }
+
+  .app-content {
+    padding: 12px 12px 86px;
+  }
+
+  .mobile-nav {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    z-index: 1200;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 2px;
+    padding: 6px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
+    backdrop-filter: blur(18px);
+  }
+
+  .mobile-nav-item {
+    min-width: 0;
+    padding: 7px 3px;
+    border: 0;
+    border-radius: 10px;
+    color: #64748b;
+    background: transparent;
+    font: inherit;
+  }
+
+  .mobile-nav-item span {
+    display: grid;
+    place-items: center;
+    height: 20px;
+  }
+
+  .mobile-nav-item svg {
+    font-size: 19px;
+  }
+
+  .mobile-nav-item small {
+    display: block;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+  }
+
+  .mobile-nav-item.active {
+    color: #2563eb;
+    background: rgba(37, 99, 235, 0.1);
+  }
+
+  .surface-card {
+    padding: 14px;
+  }
+
+  .metrics-grid,
+  .feature-grid,
+  .profiles-grid,
+  .mini-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .hide-sm {
+    display: none !important;
+  }
+}

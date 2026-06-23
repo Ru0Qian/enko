@@ -528,4 +528,4 @@ async function acceptRecommendedMap(options = {}) {
   }
 }
 
-initMethodAnalysis();
+window.initMethodAnalysis = initMethodAnalysis;

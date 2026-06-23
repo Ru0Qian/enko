@@ -2,13 +2,14 @@
 <html class="dark" lang="zh-CN" data-theme="dark"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>哨兵控制台 - Enko APK 加固引擎</title>
+<title>Enko Forge - APK 加固控制台</title>
 <!-- Apply persisted theme before any paint to avoid flash -->
 <script>(function(){try{var t=localStorage.getItem('enko_theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches){document.documentElement.setAttribute('data-theme','light');}}catch(_){}})();</script>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="theme.css?v=2.7.0"/>
+<link rel="stylesheet" href="redesign.css?v=3.0.0"/>
 <script src="js/ui.js?v=2.7.0"></script>
 <script>
 tailwind.config = {
@@ -51,11 +52,11 @@ tailwind.config = {
 <div class="p-6">
   <div class="flex items-center gap-3">
     <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-container flex items-center justify-center shadow-lg shadow-primary/20">
-      <span class="material-symbols-outlined text-on-primary-fixed" style="font-variation-settings:'FILL' 1;">security</span>
+      <span class="material-symbols-outlined text-on-primary-fixed" style="font-variation-settings:'FILL' 1;">encrypted</span>
     </div>
     <div>
-      <h1 class="text-xl font-bold tracking-tighter text-blue-400 font-headline">哨兵控制台</h1>
-      <p class="text-[10px] uppercase tracking-widest text-slate-500 font-headline">APK 加固引擎</p>
+      <h1 class="text-xl font-bold tracking-tighter text-blue-400 font-headline">Enko Forge</h1>
+      <p class="text-[10px] uppercase tracking-widest text-slate-500 font-headline">Protection Workbench</p>
     </div>
   </div>
 </div>
@@ -79,7 +80,7 @@ tailwind.config = {
     <span class="material-symbols-outlined" aria-hidden="true">admin_panel_settings</span><span class="font-medium">用户管理</span>
   </a>
 </nav>
-<div class="p-4 mt-auto text-center text-xs text-slate-600">Enko v2.2</div>
+<div class="p-4 mt-auto text-center text-xs text-slate-600">Local Console v3</div>
 </aside>
 <div id="sidebarOverlay" class="fixed inset-0 bg-black/50 z-40 hidden md:hidden" onclick="toggleSidebar()"></div>
 
@@ -95,12 +96,12 @@ tailwind.config = {
 <div class="flex items-center gap-8">
   <div class="relative flex items-center">
     <span class="material-symbols-outlined absolute left-3 text-slate-500 text-sm">search</span>
-    <input id="global-search" class="bg-surface-container-low border-none rounded-full pl-10 pr-4 py-1.5 text-xs text-on-surface w-64 focus:ring-1 focus:ring-primary placeholder:text-slate-600" placeholder="搜索任务或资产..." type="text"/>
+    <input id="global-search" class="bg-surface-container-low border-none rounded-full pl-10 pr-4 py-1.5 text-xs text-on-surface w-64 focus:ring-1 focus:ring-primary placeholder:text-slate-600" placeholder="任务 / 报告 / 产物" type="text"/>
   </div>
   <div class="flex items-center gap-6">
     <div class="flex items-center gap-2 px-3 py-1 bg-secondary/10 rounded-full">
       <div id="system-status-dot" class="w-2 h-2 rounded-full bg-secondary animate-pulse"></div>
-      <span id="system-status-text" class="text-[10px] font-bold text-secondary uppercase tracking-tighter">系统：在线</span>
+      <span id="system-status-text" class="text-[10px] font-bold text-secondary uppercase tracking-tighter">引擎在线</span>
     </div>
     <div class="flex items-center gap-4">
       <button class="theme-toggle" data-theme-toggle aria-label="切换主题" title="切换深色/浅色主题">
@@ -138,7 +139,7 @@ tailwind.config = {
 <div id="auth-loading" class="fixed inset-0 z-[60] bg-slate-950 flex items-center justify-center">
   <div class="text-center">
     <div class="w-12 h-12 border-3 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
-    <p class="text-sm text-slate-400 font-medium">正在验证身份...</p>
+    <p class="text-sm text-slate-400 font-medium">正在进入 Enko Forge...</p>
   </div>
 </div>
 
@@ -184,10 +185,10 @@ tailwind.config = {
 </div>
 
 <script src="js/utils.js?v=2.6.0"></script>
-<script src="js/api.js?v=2.6.0"></script>
-<script src="js/analyzer.js?v=2.6.1"></script>
-<script src="js/report.js?v=2.6.2"></script>
+<script src="js/api.js?v=3.0.0"></script>
+<script src="js/analyzer.js?v=3.0.0"></script>
+<script src="js/report.js?v=3.0.0"></script>
 <script src="js/jobs.js?v=2.6.2"></script>
 <script src="js/views.js?v=2.7.0"></script>
-<script src="app.js?v=2.7.0"></script>
+<script src="app.js?v=3.0.0"></script>
 </body></html>

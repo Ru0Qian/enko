@@ -146,6 +146,7 @@ function renderReport(report) {
   const vmpCore = methodProtection.vmp_interpreter_core || {};
   const controls = report.controls || [];
   const recommendations = report.recommendations || [];
+  const compiled = report.compiled || {};
 
   els.scoreValue.textContent = `${report.score ?? 0} / ${report.max_score ?? 100}`;
   els.gradeValue.textContent = report.grade ?? "-";
@@ -163,6 +164,13 @@ function renderReport(report) {
 
   els.nativeCoreValue.textContent = `${nativePinnedCount} / ${nativePresentCount || 0}`;
   els.hookTargetsValue.textContent = (nativeCore.hook_watch_targets || ["agpcore"]).join(", ");
+  renderVisibleReport(report, {
+    controls,
+    recommendations,
+    methodProtection,
+    compiled,
+    nativeCore,
+  });
 
   renderStackList(
     els.controlsList,
@@ -238,6 +246,93 @@ function renderReport(report) {
           },
         ]
   );
+}
+
+function renderVisibleReport(report, context) {
+  const { controls, recommendations, methodProtection, compiled, nativeCore } = context;
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+  const setWidth = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.style.width = value;
+  };
+  const ratio = (done, total) => {
+    const d = Number(done || 0);
+    const t = Math.max(Number(total || 0), d, 1);
+    return Math.min(100, Math.round((d / t) * 100));
+  };
+
+  const score = report.score ?? 0;
+  const maxScore = report.max_score ?? 100;
+  const scorePct = Math.max(0, Math.min(100, (Number(score) / Number(maxScore || 100)) * 100));
+  const mode = report.target_runtime?.mode ?? "standard";
+  const coverage = percent(methodProtection.protectable_coverage_ratio);
+  const requestedTotal = methodProtection.requested_total ?? (
+    (compiled.extract || 0) + (compiled.vmp_dex || 0) + (compiled.dex2c || 0)
+  );
+  const compiledTotal = methodProtection.compiled_total ?? (
+    (compiled.extract || 0) + (compiled.vmp_dex || 0) + (compiled.dex2c || 0)
+  );
+
+  setText("rpt-score-num", String(score ?? "-"));
+  setText("rpt-score-grade", `Grade ${report.grade ?? "-"}`);
+  setText("rpt-summary-text", `当前报告评分 ${score} / ${maxScore}，风险策略 ${report.risk_policy ?? "-"} / ${report.risk_profile ?? "-"}，方法覆盖 ${coverage}。`);
+  setText("rpt-scan-date", new Date().toLocaleDateString("zh-CN"));
+  setText("rpt-env-mode", mode);
+  setText("rpt-env-policy", `${report.risk_policy ?? "-"} / ${report.risk_profile ?? "-"}`);
+  setText("rpt-env-coverage", coverage);
+  setText("rpt-env-note", `Native core pinned ${(
+    (nativeCore.libapp?.integrity_pinned ? 1 : 0) +
+    (nativeCore.libflutter?.integrity_pinned ? 1 : 0)
+  )} 项，hook watch targets ${(nativeCore.hook_watch_targets || ["agpcore"]).join(", ")}。`);
+  setText("rpt-rec-badge", `${recommendations.length} 个待处理`);
+  setText("rpt-extract-label", `${compiled.extract ?? 0} / ${requestedTotal || "—"} (${ratio(compiled.extract, requestedTotal)}%)`);
+  setText("rpt-vmp-label", `${compiled.vmp_dex ?? 0} / ${requestedTotal || "—"} (${ratio(compiled.vmp_dex, requestedTotal)}%)`);
+  setText("rpt-dex2c-label", `${compiled.dex2c ?? 0} / ${requestedTotal || "—"} (${ratio(compiled.dex2c, requestedTotal)}%)`);
+  setText("rpt-stat-controls", String(controls.length || 0));
+  setText("rpt-stat-compiled", String(compiledTotal || 0));
+  setText("rpt-stat-coverage", methodProtection.coverage_grade ?? "-");
+
+  setWidth("rpt-extract-bar", `${ratio(compiled.extract, requestedTotal)}%`);
+  setWidth("rpt-vmp-bar", `${ratio(compiled.vmp_dex, requestedTotal)}%`);
+  setWidth("rpt-dex2c-bar", `${ratio(compiled.dex2c, requestedTotal)}%`);
+  const gauge = document.querySelector("#view-reports .radial-gauge");
+  if (gauge) {
+    gauge.style.background = `conic-gradient(var(--c-secondary) 0% ${scorePct}%, var(--c-surface-highest) ${scorePct}% 100%)`;
+  }
+
+  const archTags = document.getElementById("rpt-arch-tags");
+  if (archTags) {
+    const targets = nativeCore.hook_watch_targets || [];
+    archTags.innerHTML = (targets.length ? targets : [mode]).slice(0, 4).map((tag) =>
+      `<span class="px-2 py-0.5 bg-surface-container-high rounded text-[10px] font-bold border border-outline-variant/30 text-primary">${escapeHtml(tag)}</span>`
+    ).join("");
+  }
+
+  const recList = document.getElementById("rpt-recommendations");
+  if (recList) {
+    if (!recommendations.length) {
+      recList.innerHTML = `<div class="empty-state empty-state-enhanced">
+        <span class="material-symbols-outlined empty-state-float">check_circle</span>
+        <p class="text-sm font-medium text-on-surface mb-1">暂无安全建议</p>
+        <p class="text-xs">当前报告没有阻塞项</p>
+      </div>`;
+    } else {
+      recList.innerHTML = recommendations.slice(0, 8).map((item) => `
+        <article class="p-4">
+          <div class="flex items-start gap-3">
+            <span class="material-symbols-outlined text-warn text-sm">priority_high</span>
+            <div>
+              <strong class="block text-sm text-on-surface">${escapeHtml(item)}</strong>
+              <small class="block mt-1 text-xs text-on-surface-variant">建议纳入下一轮加固配置校准。</small>
+            </div>
+          </div>
+        </article>
+      `).join("");
+    }
+  }
 }
 
 function renderStackList(container, items) {

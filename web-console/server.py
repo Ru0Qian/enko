@@ -433,6 +433,19 @@ class Handler(SimpleHTTPRequestHandler):
                     return
             send_json(self, {"job": snapshot_job(job_id)})
             return
+        if parsed.path == "/react":
+            self.send_response(HTTPStatus.MOVED_PERMANENTLY)
+            self.send_header("Location", "/react/")
+            self.end_headers()
+            return
+        if parsed.path.startswith("/react/"):
+            rel_path = parsed.path[len("/react/"):] or "index.html"
+            target = WEB_ROOT / "react-dist" / rel_path
+            if target.is_dir():
+                target = target / "index.html"
+                rel_path = f"{rel_path.rstrip('/')}/index.html"
+            self.path = f"/react-dist/{rel_path}" if target.is_file() else "/react-dist/index.html"
+            return super().do_GET()
         if parsed.path in {"/", ""}:
             self.path = "/index.html"
         return super().do_GET()

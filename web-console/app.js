@@ -57,6 +57,7 @@ const state = {
   activeJobId: localStorage.getItem("enko_active_job") || null,
   pollTimer: null,
 };
+document.documentElement.dataset.enkoAppScript = "loaded";
 
 const profileNames = {
   android_prod: "Android 生产",
@@ -150,87 +151,93 @@ const sampleReport = {
   },
 };
 
-const els = {
-  heroGateCount: document.getElementById("heroGateCount"),
-  heroMode: document.getElementById("heroMode"),
-  heroPolicy: document.getElementById("heroPolicy"),
-  profileBadge: document.getElementById("profileBadge"),
-  inputApk: document.getElementById("inputApk"),
-  shellApk: document.getElementById("shellApk"),
-  outputApk: document.getElementById("outputApk"),
-  ndkPath: document.getElementById("ndkPath"),
-  protectionMap: document.getElementById("protectionMap"),
-  reportJsonPath: document.getElementById("reportJsonPath"),
-  featureExtract: document.getElementById("featureExtract"),
-  featureVmpDex: document.getElementById("featureVmpDex"),
-  featureDex2c: document.getElementById("featureDex2c"),
-  featureVmpShellDex: document.getElementById("featureVmpShellDex"),
-  featurePolymorphicShell: document.getElementById("featurePolymorphicShell"),
-  featureAiDecoy: document.getElementById("featureAiDecoy"),
-  extractOnDemand: document.getElementById("extractOnDemand"),
-  methodSmartPreset: document.getElementById("methodSmartPreset"),
-  vmpObfuscationPreset: document.getElementById("vmpObfuscationPreset"),
-  vmpVmTier: document.getElementById("vmpVmTier"),
-  dex2cOllvm: document.getElementById("dex2cOllvm"),
-  dex2cOllvmRequired: document.getElementById("dex2cOllvmRequired"),
-  dex2cOllvmClang: document.getElementById("dex2cOllvmClang"),
-  abiArm64: document.getElementById("abiArm64"),
-  abiArm32: document.getElementById("abiArm32"),
-  abiX86_64: document.getElementById("abiX86_64"),
-  abiX86: document.getElementById("abiX86"),
-  commercialMode: document.getElementById("commercialMode"),
-  flutterMode: document.getElementById("flutterMode"),
-  signingEnabled: document.getElementById("signingEnabled"),
-  signCertSha256: document.getElementById("signCertSha256"),
-  perApkKey: document.getElementById("perApkKey"),
-  detectRoot: document.getElementById("detectRoot"),
-  detectEmulator: document.getElementById("detectEmulator"),
-  protectDexPages: document.getElementById("protectDexPages"),
-  blockProxyVpn: document.getElementById("blockProxyVpn"),
-  releaseManifestEnabled: document.getElementById("releaseManifestEnabled"),
-  releaseManifestPath: document.getElementById("releaseManifestPath"),
-  releaseManifestBox: document.getElementById("releaseManifestBox"),
-  minExtract: document.getElementById("minExtract"),
-  minVmp: document.getElementById("minVmp"),
-  minDex2c: document.getElementById("minDex2c"),
-  minScore: document.getElementById("minScore"),
-  keystorePath: document.getElementById("keystorePath"),
-  ksPass: document.getElementById("ksPass"),
-  keyAlias: document.getElementById("keyAlias"),
-  keyPass: document.getElementById("keyPass"),
-  commandPreview: document.getElementById("commandPreview"),
-  copyCommand: document.getElementById("copyCommand"),
-  startHardening: document.getElementById("startHardening"),
-  signingBox: document.getElementById("signingBox"),
-  externalSigningBox: document.getElementById("externalSigningBox"),
-  gatesFlow: document.getElementById("gatesFlow"),
-  reportFile: document.getElementById("reportFile"),
-  loadSample: document.getElementById("loadSample"),
-  scoreValue: document.getElementById("scoreValue"),
-  gradeValue: document.getElementById("gradeValue"),
-  modeValue: document.getElementById("modeValue"),
-  policyValue: document.getElementById("policyValue"),
-  coverageValue: document.getElementById("coverageValue"),
-  coverageRole: document.getElementById("coverageRole"),
-  nativeCoreValue: document.getElementById("nativeCoreValue"),
-  hookTargetsValue: document.getElementById("hookTargetsValue"),
-  controlsList: document.getElementById("controlsList"),
-  nativeCoreList: document.getElementById("nativeCoreList"),
-  methodStats: document.getElementById("methodStats"),
-  recommendationsList: document.getElementById("recommendationsList"),
-  jobStatusBadge: document.getElementById("jobStatusBadge"),
-  jobIdValue: document.getElementById("jobIdValue"),
-  jobReturnCode: document.getElementById("jobReturnCode"),
-  jobDuration: document.getElementById("jobDuration"),
-  jobOutputApk: document.getElementById("jobOutputApk"),
-  jobReportPath: document.getElementById("jobReportPath"),
-  jobMetaList: document.getElementById("jobMetaList"),
-  jobReportSummaryList: document.getElementById("jobReportSummaryList"),
-  jobCommandPreview: document.getElementById("jobCommandPreview"),
-  jobLog: document.getElementById("jobLog"),
-};
+const els = {};
+
+function refreshElements() {
+  Object.assign(els, {
+    heroGateCount: document.getElementById("heroGateCount"),
+    heroMode: document.getElementById("heroMode"),
+    heroPolicy: document.getElementById("heroPolicy"),
+    profileBadge: document.getElementById("profileBadge"),
+    inputApk: document.getElementById("inputApk"),
+    shellApk: document.getElementById("shellApk"),
+    outputApk: document.getElementById("outputApk"),
+    ndkPath: document.getElementById("ndkPath"),
+    protectionMap: document.getElementById("protectionMap"),
+    reportJsonPath: document.getElementById("reportJsonPath"),
+    featureExtract: document.getElementById("featureExtract"),
+    featureVmpDex: document.getElementById("featureVmpDex"),
+    featureDex2c: document.getElementById("featureDex2c"),
+    featureVmpShellDex: document.getElementById("featureVmpShellDex"),
+    featurePolymorphicShell: document.getElementById("featurePolymorphicShell"),
+    featureAiDecoy: document.getElementById("featureAiDecoy"),
+    extractOnDemand: document.getElementById("extractOnDemand"),
+    methodSmartPreset: document.getElementById("methodSmartPreset"),
+    vmpObfuscationPreset: document.getElementById("vmpObfuscationPreset"),
+    vmpVmTier: document.getElementById("vmpVmTier"),
+    dex2cOllvm: document.getElementById("dex2cOllvm"),
+    dex2cOllvmRequired: document.getElementById("dex2cOllvmRequired"),
+    dex2cOllvmClang: document.getElementById("dex2cOllvmClang"),
+    abiArm64: document.getElementById("abiArm64"),
+    abiArm32: document.getElementById("abiArm32"),
+    abiX86_64: document.getElementById("abiX86_64"),
+    abiX86: document.getElementById("abiX86"),
+    commercialMode: document.getElementById("commercialMode"),
+    flutterMode: document.getElementById("flutterMode"),
+    signingEnabled: document.getElementById("signingEnabled"),
+    signCertSha256: document.getElementById("signCertSha256"),
+    perApkKey: document.getElementById("perApkKey"),
+    detectRoot: document.getElementById("detectRoot"),
+    detectEmulator: document.getElementById("detectEmulator"),
+    protectDexPages: document.getElementById("protectDexPages"),
+    blockProxyVpn: document.getElementById("blockProxyVpn"),
+    releaseManifestEnabled: document.getElementById("releaseManifestEnabled"),
+    releaseManifestPath: document.getElementById("releaseManifestPath"),
+    releaseManifestBox: document.getElementById("releaseManifestBox"),
+    minExtract: document.getElementById("minExtract"),
+    minVmp: document.getElementById("minVmp"),
+    minDex2c: document.getElementById("minDex2c"),
+    minScore: document.getElementById("minScore"),
+    keystorePath: document.getElementById("keystorePath"),
+    ksPass: document.getElementById("ksPass"),
+    keyAlias: document.getElementById("keyAlias"),
+    keyPass: document.getElementById("keyPass"),
+    commandPreview: document.getElementById("commandPreview"),
+    copyCommand: document.getElementById("copyCommand"),
+    startHardening: document.getElementById("startHardening"),
+    signingBox: document.getElementById("signingBox"),
+    externalSigningBox: document.getElementById("externalSigningBox"),
+    gatesFlow: document.getElementById("gatesFlow"),
+    reportFile: document.getElementById("reportFile"),
+    loadSample: document.getElementById("loadSample"),
+    scoreValue: document.getElementById("scoreValue"),
+    gradeValue: document.getElementById("gradeValue"),
+    modeValue: document.getElementById("modeValue"),
+    policyValue: document.getElementById("policyValue"),
+    coverageValue: document.getElementById("coverageValue"),
+    coverageRole: document.getElementById("coverageRole"),
+    nativeCoreValue: document.getElementById("nativeCoreValue"),
+    hookTargetsValue: document.getElementById("hookTargetsValue"),
+    controlsList: document.getElementById("controlsList"),
+    nativeCoreList: document.getElementById("nativeCoreList"),
+    methodStats: document.getElementById("methodStats"),
+    recommendationsList: document.getElementById("recommendationsList"),
+    jobStatusBadge: document.getElementById("jobStatusBadge"),
+    jobIdValue: document.getElementById("jobIdValue"),
+    jobReturnCode: document.getElementById("jobReturnCode"),
+    jobDuration: document.getElementById("jobDuration"),
+    jobOutputApk: document.getElementById("jobOutputApk"),
+    jobReportPath: document.getElementById("jobReportPath"),
+    jobMetaList: document.getElementById("jobMetaList"),
+    jobReportSummaryList: document.getElementById("jobReportSummaryList"),
+    jobCommandPreview: document.getElementById("jobCommandPreview"),
+    jobLog: document.getElementById("jobLog"),
+  });
+}
 
 async function init() {
+  refreshElements();
+  initShellNavigation();
   const authLoading = document.getElementById("auth-loading");
   // Check auth: if no token or token invalid, show login
   if (!auth.token) { if (authLoading) authLoading.remove(); showLoginScreen(); return; }
@@ -257,6 +264,7 @@ async function init() {
   bindPolicyButtons();
   bindRiskButtons();
   bindFields();
+  if (typeof initMethodAnalysis === "function") initMethodAnalysis();
   initUploadZone();
   initNavigation();
   renderGates();
@@ -373,19 +381,20 @@ function applyTierUI() {
   // Risk policy: block/exit locked for free
   document.querySelectorAll("[data-policy]").forEach(btn => {
     const policy = btn.getAttribute("data-policy");
-    const allowed = limits.risk_policies ? new Set(limits.risk_policies) : new Set(["log", "block", "exit"]);
+    const allowed = limits.risk_policies ? new Set(limits.risk_policies) : new Set(["block", "degrade", "warn", "log", "off", "exit"]);
+    const lockTarget = btn.closest("label") || btn;
     if (!allowed.has(policy)) {
       btn.disabled = true;
-      btn.classList.add("opacity-50", "cursor-not-allowed");
-      btn.title = `风险策略 "${policy}" 为专业版功能`;
-      if (!btn.querySelector(".lock-icon")) {
-        btn.insertAdjacentHTML("beforeend", '<span class="material-symbols-outlined lock-icon ml-1" style="font-size:14px">lock</span>');
+      lockTarget.classList.add("opacity-50", "cursor-not-allowed");
+      lockTarget.title = `风险策略 "${policy}" 为专业版功能`;
+      if (!lockTarget.querySelector(".lock-icon")) {
+        lockTarget.insertAdjacentHTML("beforeend", '<span class="material-symbols-outlined lock-icon ml-auto" style="font-size:14px">lock</span>');
       }
     } else {
       btn.disabled = false;
-      btn.classList.remove("opacity-50", "cursor-not-allowed");
-      btn.title = "";
-      const lockIcon = btn.querySelector(".lock-icon");
+      lockTarget.classList.remove("opacity-50", "cursor-not-allowed");
+      lockTarget.title = "";
+      const lockIcon = lockTarget.querySelector(".lock-icon");
       if (lockIcon) lockIcon.remove();
     }
   });
@@ -394,18 +403,19 @@ function applyTierUI() {
   document.querySelectorAll("[data-risk]").forEach(btn => {
     const risk = btn.getAttribute("data-risk");
     const allowed = limits.risk_profiles ? new Set(limits.risk_profiles) : new Set(["compat", "balanced", "strict"]);
+    const lockTarget = btn.closest("label") || btn;
     if (!allowed.has(risk)) {
       btn.disabled = true;
-      btn.classList.add("opacity-50", "cursor-not-allowed");
-      btn.title = `风险等级 "${risk}" 为专业版功能`;
-      if (!btn.querySelector(".lock-icon")) {
-        btn.insertAdjacentHTML("beforeend", '<span class="material-symbols-outlined lock-icon ml-1" style="font-size:14px">lock</span>');
+      lockTarget.classList.add("opacity-50", "cursor-not-allowed");
+      lockTarget.title = `风险等级 "${risk}" 为专业版功能`;
+      if (!lockTarget.querySelector(".lock-icon")) {
+        lockTarget.insertAdjacentHTML("beforeend", '<span class="material-symbols-outlined lock-icon ml-auto" style="font-size:14px">lock</span>');
       }
     } else {
       btn.disabled = false;
-      btn.classList.remove("opacity-50", "cursor-not-allowed");
-      btn.title = "";
-      const lockIcon = btn.querySelector(".lock-icon");
+      lockTarget.classList.remove("opacity-50", "cursor-not-allowed");
+      lockTarget.title = "";
+      const lockIcon = lockTarget.querySelector(".lock-icon");
       if (lockIcon) lockIcon.remove();
     }
   });
@@ -473,10 +483,10 @@ async function loadEnvironment() {
     state.environment = payload.defaults;
     state.defaultShellApk = payload.defaultShellApk || "";
     state.websocketAvailable = Boolean(payload.websocketAvailable);
-    if (!els.shellApk.value.trim() && state.defaultShellApk) {
+    if (els.shellApk && !els.shellApk.value.trim() && state.defaultShellApk) {
       els.shellApk.value = state.defaultShellApk;
     }
-    if (isPlaceholderNdk(els.ndkPath.value) && payload.defaults.ndk) {
+    if (els.ndkPath && isPlaceholderNdk(els.ndkPath.value) && payload.defaults.ndk) {
       els.ndkPath.value = payload.defaults.ndk;
     }
   } catch (error) {
@@ -653,7 +663,7 @@ function bindFields() {
   if (els.abiX86) els.abiX86.addEventListener("change", scheduleRenderCommand);
 
   // Real-time inline validation: clear errors on interaction
-  els.inputApk.addEventListener("input", () => clearFieldError("apkDropZone"));
+  if (els.inputApk) els.inputApk.addEventListener("input", () => clearFieldError("apkDropZone"));
   [els.featureExtract, els.featureVmpDex, els.featureDex2c].forEach(cb => {
     if (cb) cb.addEventListener("change", () => clearFieldError("featureCardsSection"));
   });
@@ -662,10 +672,10 @@ function bindFields() {
   if (els.ksPass) els.ksPass.addEventListener("input", () => clearFieldError("ksPass"));
   if (els.signCertSha256) els.signCertSha256.addEventListener("input", () => clearFieldError("signCertSha256"));
 
-  els.copyCommand.addEventListener("click", copyCommand);
-  els.startHardening.addEventListener("click", startHardening);
-  els.reportFile.addEventListener("change", handleReportUpload);
-  els.loadSample.addEventListener("click", () => renderReport(sampleReport));
+  if (els.copyCommand) els.copyCommand.addEventListener("click", copyCommand);
+  if (els.startHardening) els.startHardening.addEventListener("click", startHardening);
+  if (els.reportFile) els.reportFile.addEventListener("change", handleReportUpload);
+  if (els.loadSample) els.loadSample.addEventListener("click", () => renderReport(sampleReport));
 }
 
 function applyProfile(profile) {
@@ -1302,6 +1312,9 @@ function syncGroup(selector, value) {
       button.dataset.policy === value ||
       button.dataset.risk === value;
     button.classList.toggle("active", matched);
+    if (button.matches('input[type="radio"], input[type="checkbox"]')) {
+      button.checked = matched;
+    }
     if (button.classList.contains("action")) {
       button.classList.toggle("primary", matched && button.dataset.profile === value);
     }
@@ -1423,8 +1436,9 @@ function toggleSidebar() {
     if (overlay) overlay.classList.remove("hidden");
   }
 }
+window.toggleSidebar = toggleSidebar;
 
-function navigateTo(name) {
+function navigateTo(name, options = {}) {
   const viewSections = document.querySelectorAll(".view-section");
   const navLinks = document.querySelectorAll("[data-nav]");
   const topbarIcon = document.getElementById("topbar-icon");
@@ -1449,10 +1463,11 @@ function navigateTo(name) {
     if (topbarTitle) topbarTitle.textContent = meta.title;
   }
 
-  if (name === "dashboard") { loadDashboardStats(); loadEngineStatus(); }
-  if (name === "jobs") loadJobsPage();
-  if (name === "job-detail" && state.activeJobId) pollJob();
-  if (name === "admin" && typeof adminLoadUsers === "function") adminLoadUsers();
+  const shouldLoadData = options.load !== false && Boolean(auth.token);
+  if (shouldLoadData && name === "dashboard") { loadDashboardStats(); loadEngineStatus(); }
+  if (shouldLoadData && name === "jobs") loadJobsPage();
+  if (shouldLoadData && name === "job-detail" && state.activeJobId) pollJob();
+  if (shouldLoadData && name === "admin" && typeof adminLoadUsers === "function") adminLoadUsers();
 
   // Close mobile sidebar after navigation
   const sidebar = document.getElementById("sidebar");
@@ -1460,20 +1475,47 @@ function navigateTo(name) {
     toggleSidebar();
   }
 }
+window.navigateTo = navigateTo;
 
-function initNavigation() {
+document.addEventListener("click", (event) => {
+  const navLink = event.target.closest?.("[data-nav]");
+  if (!navLink) return;
+  event.preventDefault();
+  navigateTo(navLink.dataset.nav);
+});
+
+function initShellNavigation() {
   const navLinks = document.querySelectorAll("[data-nav]");
   navLinks.forEach(link => {
-    link.addEventListener("click", () => navigateTo(link.dataset.nav));
+    if (link.dataset.navWired === "1") return;
+    link.dataset.navWired = "1";
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      navigateTo(link.dataset.nav);
+    });
+    link.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      navigateTo(link.dataset.nav);
+    });
   });
 
-  // Initialize: default active dashboard
-  const initNav = document.querySelector('[data-nav="dashboard"]');
-  if (initNav) initNav.classList.add("active");
-
-  // Hamburger menu toggle
   const menuToggle = document.getElementById("menuToggle");
-  if (menuToggle) menuToggle.addEventListener("click", toggleSidebar);
+  if (menuToggle && menuToggle.dataset.menuWired !== "1" && !menuToggle.hasAttribute("onclick")) {
+    menuToggle.dataset.menuWired = "1";
+    menuToggle.addEventListener("click", toggleSidebar);
+  }
+
+  const activeView = document.querySelector(".view-section.active");
+  const activeName = activeView && activeView.id.startsWith("view-")
+    ? activeView.id.slice(5)
+    : "dashboard";
+  navigateTo(activeName, { load: false });
+}
+
+function initNavigation() {
+  initShellNavigation();
 
   // Profile card selection → sync to app.js applyProfile
   const profileCards = document.querySelectorAll("[data-profile-card]");
@@ -1482,11 +1524,15 @@ function initNavigation() {
     if (typeof applyProfile === "function") applyProfile(value);
   }
   profileCards.forEach(card => {
+    if (card.dataset.profileWired === "1") return;
+    card.dataset.profileWired = "1";
     card.addEventListener("click", () => selectProfileCard(card.dataset.profileCard));
   });
   if (profileCards.length) selectProfileCard(profileCards[0].dataset.profileCard);
 
   document.querySelectorAll("[data-quick-preset]").forEach(btn => {
+    if (btn.dataset.quickPresetWired === "1") return;
+    btn.dataset.quickPresetWired = "1";
     btn.addEventListener("click", () => {
       if (typeof applyQuickPreset === "function") applyQuickPreset(btn.dataset.quickPreset);
     });
@@ -1494,6 +1540,8 @@ function initNavigation() {
 
   // Strategy radio buttons → sync to app.js state
   document.querySelectorAll('input[name="strategy"][data-policy]').forEach(radio => {
+    if (radio.dataset.strategyWired === "1") return;
+    radio.dataset.strategyWired = "1";
     radio.addEventListener("change", () => {
       if (radio.checked && typeof state !== "undefined") {
         state.riskPolicy = radio.value;
@@ -1504,6 +1552,8 @@ function initNavigation() {
 
   // Profile "copy and edit" buttons → apply profile + jump to new-job
   document.querySelectorAll(".profile-apply-btn[data-profile]").forEach(btn => {
+    if (btn.dataset.profileApplyWired === "1") return;
+    btn.dataset.profileApplyWired = "1";
     btn.addEventListener("click", () => {
       const profile = btn.dataset.profile;
       selectProfileCard(profile);
@@ -1513,7 +1563,8 @@ function initNavigation() {
 
   // "Create custom plan" button → jump to new-job
   const createBtn = document.querySelector("#view-profiles button:has(span.material-symbols-outlined)");
-  if (createBtn && createBtn.textContent.includes("创建自定义方案")) {
+  if (createBtn && createBtn.dataset.createProfileWired !== "1" && createBtn.textContent.includes("创建自定义方案")) {
+    createBtn.dataset.createProfileWired = "1";
     createBtn.addEventListener("click", () => navigateTo("new-job"));
   }
 }
@@ -1818,14 +1869,25 @@ async function adminCreateUser() {
 // #view-host. If views.js is already done by the time we get here (cache hit),
 // the event listener catches the late dispatch via window.__enkoViewsReady.
 // ---------------------------------------------------------------------------
-window.enkoInit = init;
+function bootEnko() {
+  if (window.__enkoInitDone) return;
+  window.__enkoInitDone = true;
+  document.documentElement.dataset.enkoInitStatus = "starting";
+  init().catch((error) => {
+    window.__enkoInitDone = false;
+    document.documentElement.dataset.enkoInitStatus = "error";
+    console.error("[enko-init]", error);
+    showToast("控制台初始化失败: " + error.message, "error");
+  }).then(() => {
+    if (window.__enkoInitDone) document.documentElement.dataset.enkoInitStatus = "done";
+  });
+}
+
+window.enkoInit = bootEnko;
+window.enkoState = state;
+window.enkoEls = els;
 if (window.__enkoViewsReady) {
-  // Views loaded before app.js parsed; safe to init right now.
-  init();
+  bootEnko();
 } else {
-  window.addEventListener("enko-views-ready", () => {
-    if (window.__enkoInitDone) return;
-    window.__enkoInitDone = true;
-    init();
-  }, { once: true });
+  window.addEventListener("enko-views-ready", bootEnko, { once: true });
 }

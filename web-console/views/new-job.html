@@ -220,8 +220,8 @@
             <span class="text-[11px] text-on-surface-variant leading-relaxed">对 libagpjnix.so 启用 Hikari/OLLVM，默认 best-effort，工具链不可用时回退 NDK。</span>
           </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
-          <input id="dex2cOllvmClang" class="bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 text-xs text-on-surface placeholder:text-slate-600 focus:ring-1 focus:ring-primary" placeholder="D:/Env/tool/hikari-llvm19/install/bin/clang.exe"/>
+        <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-2">
+          <input id="dex2cOllvmClang" class="min-w-0 bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 text-xs text-on-surface placeholder:text-slate-600 focus:ring-1 focus:ring-primary" placeholder="D:/Env/tool/hikari-llvm19/install/bin/clang.exe"/>
           <label class="inline-flex items-center gap-2 px-3 py-2 bg-surface-container border border-outline-variant/20 rounded-lg text-xs text-on-surface-variant cursor-pointer">
             <input id="dex2cOllvmRequired" type="checkbox" class="rounded"/>
             必须成功
@@ -545,6 +545,36 @@
         </label>
       </div>
       <!-- Risk Profile hint below strategy -->
+      <div class="mt-5 pt-4 border-t border-outline-variant/20">
+        <div class="flex items-center justify-between mb-3 gap-3">
+          <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">风险档位</label>
+          <span class="text-[9px] text-on-surface-variant">决定高置信风险是否可以终止进程</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <button type="button" data-risk="compat" class="risk-chip flex items-center justify-between gap-3 p-3 bg-surface-container-low rounded-xl border border-outline-variant/20 text-left hover:border-secondary/40 transition-all">
+            <span>
+              <span class="block text-xs font-bold text-on-surface">Compat</span>
+              <span class="block text-[10px] text-on-surface-variant mt-0.5">兼容优先，不杀进程</span>
+            </span>
+            <span class="material-symbols-outlined text-sm text-secondary">verified</span>
+          </button>
+          <button type="button" data-risk="balanced" class="risk-chip flex items-center justify-between gap-3 p-3 bg-surface-container-low rounded-xl border border-outline-variant/20 text-left hover:border-primary/40 transition-all">
+            <span>
+              <span class="block text-xs font-bold text-on-surface">Balanced</span>
+              <span class="block text-[10px] text-on-surface-variant mt-0.5">默认生产策略</span>
+            </span>
+            <span class="material-symbols-outlined text-sm text-primary">tune</span>
+          </button>
+          <button type="button" data-risk="strict" class="risk-chip flex items-center justify-between gap-3 p-3 bg-surface-container-low rounded-xl border border-outline-variant/20 text-left hover:border-tertiary/40 transition-all">
+            <span>
+              <span class="block text-xs font-bold text-on-surface">Strict</span>
+              <span class="block text-[10px] text-on-surface-variant mt-0.5">强对抗，可终止</span>
+            </span>
+            <span class="material-symbols-outlined text-sm text-tertiary">gpp_maybe</span>
+          </button>
+        </div>
+      </div>
+
       <div class="mt-3 p-3 bg-surface-container-highest/30 rounded-lg border border-outline-variant/10">
         <div class="flex items-start gap-2">
           <span class="material-symbols-outlined text-xs text-primary shrink-0 mt-0.5">lightbulb</span>
@@ -574,6 +604,26 @@
     <span id="abiSummary" class="text-[10px] text-on-surface-variant shrink-0 mr-2">已选 1 个平台</span>
   </summary>
   <div class="px-5 md:px-6 pb-6 space-y-6">
+    <div>
+      <label class="text-[10px] font-bold text-slate-500 block mb-3 uppercase tracking-widest">目标运行时</label>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <button type="button" data-target="android" class="target-chip flex items-center justify-between gap-3 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20 text-left hover:border-secondary/40 transition-all">
+          <span>
+            <span class="block text-sm font-bold text-on-surface">Android Native</span>
+            <span class="block text-[11px] text-on-surface-variant mt-1">通用 APK，优先 ARM64 生产包</span>
+          </span>
+          <span class="material-symbols-outlined text-secondary">android</span>
+        </button>
+        <button type="button" data-target="flutter" class="target-chip flex items-center justify-between gap-3 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20 text-left hover:border-primary/40 transition-all">
+          <span>
+            <span class="block text-sm font-bold text-on-surface">Flutter Runtime</span>
+            <span class="block text-[11px] text-on-surface-variant mt-1">额外关注 libapp.so / libflutter.so</span>
+          </span>
+          <span class="material-symbols-outlined text-primary">flutter</span>
+        </button>
+      </div>
+    </div>
+
     <!-- ABI Selection -->
     <div>
       <label class="text-[10px] font-bold text-slate-500 block mb-3 uppercase tracking-widest">指令集架构 (ABI)</label>
@@ -758,6 +808,7 @@
 <!-- ═══════════════════════════════════════════════════════════ -->
 <!-- Row 8: Summary Bar + Actions                               -->
 <!-- ═══════════════════════════════════════════════════════════ -->
+<aside class="new-job-rail">
 <div class="glass-panel p-5 md:p-6 rounded-xl border border-secondary/20 bg-secondary/5 space-y-4 mb-6">
   <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
@@ -813,6 +864,7 @@
     </button>
   </section>
 </div>
+</aside>
 
 </div>
 </section>
