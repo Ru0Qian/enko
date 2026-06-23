@@ -27,7 +27,6 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
   lld \
   ninja-build \
   python3 \
-  python3-distutils \
   zlib1g-dev
 
 mkdir -p "$TOOLCHAIN_ROOT"
