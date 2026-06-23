@@ -242,7 +242,7 @@ int enko_d2c_init(JNIEnv *env, jobject classLoader) {
 
 DEFAULT_OLLVM_CLANG = os.environ.get(
     "ENKO_OLLVM_CLANG",
-    r"D:/Env/tool/hikari-llvm19/install/bin/clang.exe",
+    "/opt/enko/toolchains/hikari-llvm19/install/bin/clang",
 )
 
 

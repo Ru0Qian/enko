@@ -23,12 +23,28 @@ python packer/harden_apk.py \
 
 Shell native 和 DEX2C 的 `libagpjnix.so` 都支持 Hikari/OLLVM。
 
+服务器默认路径为：
+
+```bash
+/opt/enko/toolchains/hikari-llvm19/install/bin/clang
+```
+
+首次部署可直接安装 Hikari/LLVM 19：
+
+```bash
+cd /opt/enko
+bash tools/install_hikari_ollvm.sh
+
+echo "ENKO_OLLVM_CLANG=/opt/enko/toolchains/hikari-llvm19/install/bin/clang" >> /etc/enko/config.env
+systemctl restart enko-web
+```
+
 DEX2C 默认开启 OLLVM，但默认是 best-effort：如果 `--dex2c-ollvm-clang` 不可用，会回退到普通 NDK clang。强保护或商业发布时使用 required：
 
 ```bash
 python packer/harden_apk.py \
   --dex2c-ollvm \
-  --dex2c-ollvm-clang D:/Env/tool/hikari-llvm19/install/bin/clang.exe \
+  --dex2c-ollvm-clang /opt/enko/toolchains/hikari-llvm19/install/bin/clang \
   --dex2c-ollvm-required
 ```
 

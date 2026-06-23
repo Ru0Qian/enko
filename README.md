@@ -523,7 +523,16 @@ Why this matters:
 
 Shell native builds enable Hikari/OLLVM by default. Override the compiler path
 with `-PenkoOllvmClang=...` or `ENKO_OLLVM_CLANG`; the repository default is
-`D:/Env/tool/hikari-llvm19/install/bin/clang.exe`.
+`/opt/enko/toolchains/hikari-llvm19/install/bin/clang`.
+
+On Linux servers, install the bundled default toolchain path with:
+
+```bash
+cd /opt/enko
+bash tools/install_hikari_ollvm.sh
+echo "ENKO_OLLVM_CLANG=/opt/enko/toolchains/hikari-llvm19/install/bin/clang" >> /etc/enko/config.env
+systemctl restart enko-web
+```
 
 Gradle example:
 

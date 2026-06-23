@@ -3945,7 +3945,7 @@ Exit codes: 0=success, 2=known error, 3=unexpected error, 130=interrupted
         "--dex2c-ollvm-clang",
         default=os.environ.get(
             "ENKO_OLLVM_CLANG",
-            "D:/Env/tool/hikari-llvm19/install/bin/clang.exe",
+            "/opt/enko/toolchains/hikari-llvm19/install/bin/clang",
         ),
         help="path to Hikari/OLLVM clang for DEX2C libagpjnix.so",
     )

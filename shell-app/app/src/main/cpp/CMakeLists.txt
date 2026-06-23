@@ -17,7 +17,7 @@ set(AGPCORE_SRC_FILES
 # Files compiled by NDK (excludes OLLVM-compiled files when OLLVM is ON)
 option(ENKO_OLLVM "Enable OLLVM/Hikari obfuscation" OFF)
 option(ENKO_OLLVM_REQUIRED "Fail configure when OLLVM is enabled but unavailable" ON)
-set(ENKO_OLLVM_CLANG "D:/Env/tool/hikari-llvm19/install/bin/clang.exe" CACHE FILEPATH "Path to Hikari/OLLVM clang")
+set(ENKO_OLLVM_CLANG "/opt/enko/toolchains/hikari-llvm19/install/bin/clang" CACHE FILEPATH "Path to Hikari/OLLVM clang")
 
 if(ENKO_OLLVM)
     # Files compiled with Hikari clang (removed from NDK sources).
@@ -73,7 +73,7 @@ target_link_options(agpcore PRIVATE
 #
 # Setup:
 #   1. Build Hikari-LLVM19 from source
-#   2. Install to D:/Env/tool/hikari-llvm19/install/
+#   2. Install to /opt/enko/toolchains/hikari-llvm19/install/
 # ======================================================================
 
 if(ENKO_OLLVM)

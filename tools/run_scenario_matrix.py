@@ -19,7 +19,7 @@ DEFAULT_OUTPUT_DIR = REPO_ROOT / "output" / "scenario-matrix"
 DEFAULT_FLAG = "flag{enko_matrix_2026}"
 DEFAULT_EXPECT_TEXT = "CORRECT! Flag accepted"
 DEFAULT_READY_TEXT = "App started successfully"
-DEFAULT_OLLVM_CLANG = Path("D:/Env/tool/hikari-llvm19/install/bin/clang.exe")
+DEFAULT_OLLVM_CLANG = Path("/opt/enko/toolchains/hikari-llvm19/install/bin/clang")
 
 
 class MatrixError(RuntimeError):

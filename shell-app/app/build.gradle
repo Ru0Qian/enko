@@ -16,7 +16,7 @@ def enkoEnableOllvm = (project.findProperty('enkoEnableOllvm') ?: 'true')
         .toBoolean()
 def enkoOllvmClang = (project.findProperty('enkoOllvmClang')
         ?: System.getenv('ENKO_OLLVM_CLANG')
-        ?: 'D:/Env/tool/hikari-llvm19/install/bin/clang.exe')
+        ?: '/opt/enko/toolchains/hikari-llvm19/install/bin/clang')
         .toString()
 
 android {

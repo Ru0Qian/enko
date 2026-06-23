@@ -1433,6 +1433,7 @@ function pathLabel(key: string) {
     sdk_root: "Android SDK",
     build_tools: "Build Tools",
     ndk: "Android NDK",
+    ollvm_clang: "Hikari/OLLVM clang",
     apktool: "apktool",
     zipalign: "zipalign",
     apksigner: "apksigner",

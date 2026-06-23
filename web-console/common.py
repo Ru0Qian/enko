@@ -178,6 +178,10 @@ def discover_environment_defaults() -> dict[str, str]:
         "apktool": "",
         "zipalign": "",
         "apksigner": "",
+        "ollvm_clang": os.environ.get(
+            "ENKO_OLLVM_CLANG",
+            "/opt/enko/toolchains/hikari-llvm19/install/bin/clang",
+        ),
     }
 
     repo_apktool_bat = REPO_ROOT / "tools" / "apktool.bat"
