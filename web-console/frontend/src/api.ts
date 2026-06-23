@@ -10,6 +10,7 @@ export type AuthState = {
   username: string | null;
   tier: string;
   tierLimits: TierLimits | null;
+  isAdmin: boolean;
 };
 
 export type Job = {
@@ -71,6 +72,49 @@ export type AdminUser = {
   username: string;
   tier: string;
   created_at?: string;
+};
+
+export type PathDiagnostic = {
+  path: string;
+  exists: boolean;
+  kind?: string;
+  is_file?: boolean;
+  is_dir?: boolean;
+  size?: number | null;
+  writable?: boolean;
+  configured?: boolean;
+  usable?: boolean;
+};
+
+export type CommandDiagnostic = {
+  command: string;
+  ok: boolean;
+  returncode?: number | null;
+  version?: string;
+  error?: string;
+};
+
+export type DiagnosticsPayload = {
+  ok: boolean;
+  timestamp: string;
+  server: Record<string, unknown>;
+  flags: {
+    production: boolean;
+    public_api_redaction: boolean;
+    public_docs_enabled: boolean;
+    monitor_token_configured: boolean;
+    cors_origins: string[];
+  };
+  paths: Record<string, PathDiagnostic>;
+  shell: {
+    available: boolean;
+    default: PathDiagnostic;
+    candidates: PathDiagnostic[];
+  };
+  toolchain: Record<string, PathDiagnostic>;
+  commands: Record<string, CommandDiagnostic>;
+  database: { connected: boolean; checked?: boolean; latency_ms?: number; error?: string };
+  environment: Record<string, string>;
 };
 
 export type AnalyzeMethodPayload = {
@@ -170,6 +214,7 @@ const TOKEN_KEY = "enko_token";
 const USER_KEY = "enko_user";
 const TIER_KEY = "enko_tier";
 const LIMITS_KEY = "enko_tier_limits";
+const ADMIN_KEY = "enko_is_admin";
 
 export function loadAuth(): AuthState {
   return {
@@ -177,13 +222,15 @@ export function loadAuth(): AuthState {
     username: localStorage.getItem(USER_KEY),
     tier: localStorage.getItem(TIER_KEY) || "free",
     tierLimits: JSON.parse(localStorage.getItem(LIMITS_KEY) || "null") as TierLimits | null,
+    isAdmin: localStorage.getItem(ADMIN_KEY) === "true",
   };
 }
 
-export function saveAuth(token: string, username: string, tier = "free", tierLimits: TierLimits | null = null) {
+export function saveAuth(token: string, username: string, tier = "free", tierLimits: TierLimits | null = null, isAdmin = false) {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, username);
   localStorage.setItem(TIER_KEY, tier);
+  localStorage.setItem(ADMIN_KEY, String(isAdmin));
   if (tierLimits) {
     localStorage.setItem(LIMITS_KEY, JSON.stringify(tierLimits));
   } else {
@@ -196,6 +243,7 @@ export function clearAuth() {
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(TIER_KEY);
   localStorage.removeItem(LIMITS_KEY);
+  localStorage.removeItem(ADMIN_KEY);
 }
 
 function authHeaders(json = true): HeadersInit {
@@ -238,14 +286,14 @@ export async function apiFetch<T>(url: string, options: RequestInit = {}): Promi
 }
 
 export async function login(username: string, password: string) {
-  return apiFetch<{ token: string; username: string; tier: string; tier_limits: TierLimits }>("/api/auth/login", {
+  return apiFetch<{ token: string; username: string; tier: string; tier_limits: TierLimits; is_admin: boolean }>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
   });
 }
 
 export async function checkAuth() {
-  return apiFetch<{ ok: boolean; username: string; tier: string; tier_limits: TierLimits }>("/api/auth/check");
+  return apiFetch<{ ok: boolean; username: string; tier: string; tier_limits: TierLimits; is_admin: boolean }>("/api/auth/check");
 }
 
 export async function getHealth() {
@@ -319,6 +367,10 @@ export async function deleteUser(username: string) {
   return apiFetch<{ ok: boolean }>(`/api/admin/users/${encodeURIComponent(username)}`, {
     method: "DELETE",
   });
+}
+
+export async function getDiagnostics() {
+  return apiFetch<DiagnosticsPayload>("/api/admin/diagnostics");
 }
 
 export async function changePassword(oldPassword: string, newPassword: string) {

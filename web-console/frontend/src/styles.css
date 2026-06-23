@@ -182,7 +182,8 @@ body {
 }
 
 .dashboard-grid,
-.reports-grid {
+.reports-grid,
+.ops-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.85fr);
   gap: 16px;
@@ -300,6 +301,28 @@ body {
   border-color: rgba(148, 163, 184, 0.24) !important;
 }
 
+.ops-table {
+  min-width: 0;
+}
+
+.ops-table table {
+  min-width: 720px;
+}
+
+.ops-path,
+.ops-inline-path {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace !important;
+  font-size: 12px !important;
+  line-height: 1.6 !important;
+}
+
+.ops-inline-path {
+  color: inherit;
+}
+
 .clickable-row {
   cursor: pointer;
 }
@@ -359,7 +382,8 @@ body {
 
   .job-workbench,
   .dashboard-grid,
-  .reports-grid {
+  .reports-grid,
+  .ops-grid {
     grid-template-columns: 1fr;
   }
 
@@ -391,6 +415,7 @@ body {
   .compose-grid,
   .risk-grid,
   .admin-grid,
+  .ops-grid,
   .two-column,
   .four-column {
     grid-template-columns: 1fr;

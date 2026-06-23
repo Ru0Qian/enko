@@ -69,19 +69,22 @@ import {
   SecurityOutlined,
   SettingsOutlined,
   ShieldOutlined,
+  StorageOutlined,
   VisibilityOutlined,
 } from "@mui/icons-material";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import type {
   AdminUser,
   AnalyzeMethodsResult,
   AuthState,
+  DiagnosticsPayload,
   HealthPayload,
   Job,
   MethodRecommendation,
   NewJobConfig,
+  PathDiagnostic,
   StatsPayload,
 } from "./api";
 import {
@@ -94,6 +97,7 @@ import {
   deleteJob,
   deleteUser,
   getDownloadToken,
+  getDiagnostics,
   getHealth,
   getJob,
   getStats,
@@ -107,7 +111,7 @@ import {
   uploadApk,
 } from "./api";
 
-type PageKey = "dashboard" | "new-job" | "jobs" | "reports" | "profiles" | "admin";
+type PageKey = "dashboard" | "new-job" | "jobs" | "reports" | "profiles" | "admin" | "ops";
 type ToastState = { open: boolean; message: string; severity: AlertColor };
 type PresetApplication = { id: number; patch: Partial<NewJobConfig> };
 type MethodRecommendationRow = {
@@ -124,6 +128,7 @@ const pageDescriptions: Record<PageKey, string> = {
   reports: "载入 report.json，审查评分、等级和编译细节。",
   profiles: "套用常用保护策略，再按任务微调。",
   admin: "管理本地控制台用户和权限等级。",
+  ops: "检查服务器路径、Shell APK、工具链、数据库和公开版安全开关。",
 };
 
 const drawerWidth = 264;
@@ -136,7 +141,31 @@ const navItems: Record<PageKey, { label: string; icon: ReactNode }> = {
   reports: { label: "报告", icon: <AnalyticsOutlined /> },
   profiles: { label: "方案", icon: <AppRegistrationOutlined /> },
   admin: { label: "管理", icon: <AdminPanelSettingsOutlined /> },
+  ops: { label: "运维", icon: <ScienceOutlined /> },
 };
+
+const pagePaths: Record<PageKey, string> = {
+  dashboard: "/",
+  "new-job": "/new-job",
+  jobs: "/jobs",
+  reports: "/reports",
+  profiles: "/profiles",
+  admin: "/admin",
+  ops: "/ops",
+};
+
+const adminOnlyPages = new Set<PageKey>(["admin", "ops"]);
+
+function pageFromPath(pathname: string): PageKey {
+  const normalized = pathname.replace(/\/+$/, "") || "/";
+  const match = (Object.entries(pagePaths) as Array<[PageKey, string]>)
+    .find(([, path]) => path === normalized);
+  return match?.[0] || "dashboard";
+}
+
+function pageForAuth(page: PageKey, isAdmin: boolean): PageKey {
+  return adminOnlyPages.has(page) && !isAdmin ? "dashboard" : page;
+}
 
 const defaultConfig: NewJobConfig = {
   inputApk: "",
@@ -375,12 +404,13 @@ function LoginPage({ onLogin, notify }: { onLogin: (auth: AuthState) => void; no
     setLoading(true);
     try {
       const payload = await login(username, password);
-      saveAuth(payload.token, payload.username, payload.tier, payload.tier_limits);
+      saveAuth(payload.token, payload.username, payload.tier, payload.tier_limits, payload.is_admin);
       onLogin({
         token: payload.token,
         username: payload.username,
         tier: payload.tier,
         tierLimits: payload.tier_limits,
+        isAdmin: payload.is_admin,
       });
       notify("已进入 Enko Forge", "success");
     } catch (error) {
@@ -1379,6 +1409,220 @@ function AdminPage({ notify }: { notify: (message: string, severity?: AlertColor
   );
 }
 
+function statusChip(ok: boolean, yes = "正常", no = "异常") {
+  return <Chip size="small" color={ok ? "success" : "error"} label={ok ? yes : no} />;
+}
+
+function formatBytes(value?: number | null) {
+  if (value == null) return "-";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function pathLabel(key: string) {
+  return ({
+    repo_root: "项目根目录",
+    web_root: "Web 目录",
+    job_root: "任务缓存",
+    upload_root: "上传缓存",
+    output: "输出目录",
+    react_dist: "React 产物",
+    packer: "加固脚本",
+    release_manifest: "发布清单",
+    sdk_root: "Android SDK",
+    build_tools: "Build Tools",
+    ndk: "Android NDK",
+    apktool: "apktool",
+    zipalign: "zipalign",
+    apksigner: "apksigner",
+  } as Record<string, string>)[key] || key;
+}
+
+function PathTable({ rows, showConfigured = false }: { rows: Array<[string, PathDiagnostic]>; showConfigured?: boolean }) {
+  return (
+    <Paper variant="outlined" className="table-shell ops-table">
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell width={150}>项目</TableCell>
+            {showConfigured ? <TableCell width={92}>配置</TableCell> : null}
+            <TableCell width={92}>状态</TableCell>
+            <TableCell width={92}>可写</TableCell>
+            <TableCell width={110}>大小</TableCell>
+            <TableCell>路径</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map(([key, item]) => (
+            <TableRow key={`${key}-${item.path || "empty"}`}>
+              <TableCell><Typography sx={{ fontWeight: 700 }}>{pathLabel(key)}</Typography></TableCell>
+              {showConfigured ? <TableCell>{statusChip(Boolean(item.configured), "已配置", "未配置")}</TableCell> : null}
+              <TableCell>{statusChip(Boolean(item.usable ?? item.exists), "可用", "缺失")}</TableCell>
+              <TableCell>{typeof item.writable === "boolean" ? statusChip(item.writable, "可写", "只读") : <Chip size="small" label="-" />}</TableCell>
+              <TableCell>{formatBytes(item.size)}</TableCell>
+              <TableCell><Typography className="ops-path">{item.path || "-"}</Typography></TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Paper>
+  );
+}
+
+function OpsPage({ notify }: { notify: (message: string, severity?: AlertColor) => void }) {
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsPayload | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function refresh() {
+    setLoading(true);
+    try {
+      setDiagnostics(await getDiagnostics());
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "诊断信息加载失败", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  const pathRows = Object.entries(diagnostics?.paths || {});
+  const toolRows = Object.entries(diagnostics?.toolchain || {});
+  const commandRows = Object.entries(diagnostics?.commands || {});
+  const envRows = Object.entries(diagnostics?.environment || {});
+  const shellCandidates = (diagnostics?.shell.candidates || []).map((item, index) => [`shell_${index + 1}`, item] as [string, PathDiagnostic]);
+  const missingTools = toolRows.filter(([, item]) => item.configured && !item.usable).length;
+  const missingRequired = [
+    diagnostics?.paths.packer?.exists,
+    diagnostics?.paths.react_dist?.exists,
+    diagnostics?.shell.available,
+    diagnostics?.database.connected,
+  ].filter((value) => value === false).length + missingTools;
+
+  return (
+    <Stack spacing={2.5}>
+      <Alert
+        severity="warning"
+        variant="outlined"
+        action={<Button startIcon={<RefreshOutlined />} onClick={() => void refresh()} disabled={loading}>刷新</Button>}
+      >
+        此页面仅管理员可见，包含服务器绝对路径、工具链状态和部署开关；不要开放给普通用户或截图外发。
+      </Alert>
+
+      <Box className="metrics-grid">
+        <MetricCard label="综合状态" value={missingRequired ? `${missingRequired} 项异常` : "健康"} icon={<ScienceOutlined />} tone={missingRequired ? "warning" : "success"} />
+        <MetricCard label="Shell APK" value={diagnostics?.shell.available ? "可用" : "缺失"} icon={<ShieldOutlined />} tone={diagnostics?.shell.available ? "success" : "warning"} />
+        <MetricCard label="数据库" value={diagnostics?.database.connected ? "已连接" : "未连接"} icon={<StorageOutlined />} tone={diagnostics?.database.connected ? "success" : "warning"} />
+        <MetricCard label="公开脱敏" value={diagnostics?.flags.public_api_redaction ? "已开启" : "未开启"} icon={<SecurityOutlined />} tone={diagnostics?.flags.public_api_redaction ? "success" : "warning"} />
+      </Box>
+
+      <Box className="ops-grid">
+        <SectionCard title="运行环境">
+          <Stack spacing={1.25}>
+            <Stack direction="row" sx={{ justifyContent: "space-between", gap: 2 }}>
+              <Typography color="text.secondary">Python</Typography>
+              <Typography className="mono-line">{String(diagnostics?.server.python || "-")}</Typography>
+            </Stack>
+            <Stack direction="row" sx={{ justifyContent: "space-between", gap: 2 }}>
+              <Typography color="text.secondary">平台</Typography>
+              <Typography className="mono-line">{String(diagnostics?.server.platform || "-")}</Typography>
+            </Stack>
+            <Stack direction="row" sx={{ justifyContent: "space-between", gap: 2 }}>
+              <Typography color="text.secondary">工作目录</Typography>
+              <Typography className="ops-path">{String(diagnostics?.server.cwd || "-")}</Typography>
+            </Stack>
+            <Stack direction="row" sx={{ justifyContent: "space-between", gap: 2 }}>
+              <Typography color="text.secondary">数据库延迟</Typography>
+              <Typography>{diagnostics?.database.latency_ms == null ? "-" : `${diagnostics.database.latency_ms} ms`}</Typography>
+            </Stack>
+            <Typography variant="caption" color="text.secondary">更新时间：{diagnostics ? formatDate(diagnostics.timestamp) : "-"}</Typography>
+          </Stack>
+        </SectionCard>
+
+        <SectionCard title="商业上线开关">
+          <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap" }}>
+            <Chip color={diagnostics?.flags.production ? "success" : "warning"} label={`生产模式 ${diagnostics?.flags.production ? "开启" : "关闭"}`} />
+            <Chip color={diagnostics?.flags.public_api_redaction ? "success" : "error"} label={`公开脱敏 ${diagnostics?.flags.public_api_redaction ? "开启" : "关闭"}`} />
+            <Chip color={diagnostics?.flags.public_docs_enabled ? "warning" : "success"} label={`公开文档 ${diagnostics?.flags.public_docs_enabled ? "开启" : "关闭"}`} />
+            <Chip color={diagnostics?.flags.monitor_token_configured ? "success" : "warning"} label={`监控令牌 ${diagnostics?.flags.monitor_token_configured ? "已配置" : "未配置"}`} />
+          </Stack>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="caption" color="text.secondary">CORS</Typography>
+          <Typography className="ops-path">{diagnostics?.flags.cors_origins?.join(", ") || "-"}</Typography>
+        </SectionCard>
+      </Box>
+
+      <SectionCard title="服务器路径">
+        <PathTable rows={pathRows} />
+      </SectionCard>
+
+      <SectionCard title="Shell APK 候选">
+        <Stack spacing={1.5}>
+          {diagnostics?.shell.default?.path ? (
+            <Alert severity={diagnostics.shell.available ? "success" : "error"} variant="outlined">
+              当前默认 Shell：<span className="ops-inline-path">{diagnostics.shell.default.path}</span>
+            </Alert>
+          ) : null}
+          <PathTable rows={shellCandidates} />
+        </Stack>
+      </SectionCard>
+
+      <SectionCard title="Android 工具链">
+        <PathTable rows={toolRows} showConfigured />
+      </SectionCard>
+
+      <Box className="ops-grid">
+        <SectionCard title="命令版本">
+          <Paper variant="outlined" className="table-shell ops-table">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell width={120}>命令</TableCell>
+                  <TableCell width={90}>状态</TableCell>
+                  <TableCell>版本输出</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {commandRows.map(([key, item]) => (
+                  <TableRow key={key}>
+                    <TableCell><Typography sx={{ fontWeight: 700 }}>{key}</Typography></TableCell>
+                    <TableCell>{statusChip(item.ok, "可执行", "失败")}</TableCell>
+                    <TableCell><Typography className="ops-path">{item.version || item.error || item.command}</Typography></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Paper>
+        </SectionCard>
+
+        <SectionCard title="环境变量">
+          <Paper variant="outlined" className="table-shell ops-table">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>变量</TableCell>
+                  <TableCell width={100}>状态</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {envRows.map(([key, value]) => (
+                  <TableRow key={key}>
+                    <TableCell><Typography className="ops-path">{key}</Typography></TableCell>
+                    <TableCell>{statusChip(Boolean(value), "已设置", "未设置")}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Paper>
+        </SectionCard>
+      </Box>
+    </Stack>
+  );
+}
+
 function PasswordDialog({ open, onClose, notify }: { open: boolean; onClose: () => void; notify: (message: string, severity?: AlertColor) => void }) {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -1429,7 +1673,7 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
   const [dark, setDark] = useState(() => localStorage.getItem("enko_react_theme") === "dark");
-  const [activePage, setActivePage] = useState<PageKey>("dashboard");
+  const [activePage, setActivePage] = useState<PageKey>(() => pageFromPath(window.location.pathname));
   const [stats, setStats] = useState<StatsPayload | null>(null);
   const [health, setHealth] = useState<HealthPayload | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -1441,6 +1685,31 @@ export default function App() {
   const notify = (messageText: string, severity: AlertColor = "info") => {
     setToast({ open: true, message: messageText, severity });
   };
+
+  const navigatePage = useCallback((page: PageKey, replace = false) => {
+    const nextPage = pageForAuth(page, auth.isAdmin);
+    setActivePage(nextPage);
+    const nextPath = pagePaths[nextPage];
+    if (window.location.pathname !== nextPath) {
+      if (replace) window.history.replaceState(null, "", nextPath);
+      else window.history.pushState(null, "", nextPath);
+    }
+  }, [auth.isAdmin]);
+
+  const syncRouteForAuth = useCallback((isAdmin: boolean) => {
+    const nextPage = pageForAuth(pageFromPath(window.location.pathname), isAdmin);
+    setActivePage(nextPage);
+    const nextPath = pagePaths[nextPage];
+    if (window.location.pathname !== nextPath) {
+      window.history.replaceState(null, "", nextPath);
+    }
+  }, []);
+
+  const visibleNavItems = useMemo(
+    () => (Object.entries(navItems) as Array<[PageKey, { label: string; icon: ReactNode }]>)
+      .filter(([key]) => !adminOnlyPages.has(key) || auth.isAdmin),
+    [auth.isAdmin],
+  );
 
   const muiTheme = useMemo(() => createTheme({
     palette: {
@@ -1497,8 +1766,9 @@ export default function App() {
       }
       try {
         const checked = await checkAuth();
-        saveAuth(auth.token, checked.username, checked.tier, checked.tier_limits);
+        saveAuth(auth.token, checked.username, checked.tier, checked.tier_limits, checked.is_admin);
         setAuth(loadAuth());
+        syncRouteForAuth(checked.is_admin);
         await refreshData();
       } catch {
         clearAuth();
@@ -1514,6 +1784,20 @@ export default function App() {
     localStorage.setItem("enko_react_theme", dark ? "dark" : "light");
   }, [dark]);
 
+  useEffect(() => {
+    const onPopState = () => {
+      setActivePage(pageForAuth(pageFromPath(window.location.pathname), loadAuth().isAdmin));
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
+    if (auth.token && adminOnlyPages.has(activePage) && !auth.isAdmin) {
+      navigatePage("dashboard", true);
+    }
+  }, [activePage, auth.isAdmin, auth.token, navigatePage]);
+
   if (booting) {
     return <Box className="boot-screen"><CircularProgress size={22} /> 正在进入 Enko Forge...</Box>;
   }
@@ -1522,7 +1806,7 @@ export default function App() {
     return (
       <ThemeProvider theme={muiTheme}>
         <CssBaseline />
-        <LoginPage onLogin={(nextAuth) => { setAuth(nextAuth); void refreshData(); }} notify={notify} />
+        <LoginPage onLogin={(nextAuth) => { setAuth(nextAuth); syncRouteForAuth(nextAuth.isAdmin); void refreshData(); }} notify={notify} />
         <Snackbar open={toast.open} autoHideDuration={3600} onClose={() => setToast((current) => ({ ...current, open: false }))}>
           <Alert severity={toast.severity} variant="filled">{toast.message}</Alert>
         </Snackbar>
@@ -1534,14 +1818,16 @@ export default function App() {
   const page = activePage === "dashboard"
     ? <DashboardPage stats={stats} health={health} jobs={jobs} onRefresh={refreshData} onOpenJob={setSelectedJob} />
     : activePage === "new-job"
-      ? <NewJobPage health={health} preset={jobPreset} notify={notify} onCreated={(job) => { setJobs((current) => [job, ...current]); setSelectedJob(job); setActivePage("jobs"); void refreshData(); }} />
+      ? <NewJobPage health={health} preset={jobPreset} notify={notify} onCreated={(job) => { setJobs((current) => [job, ...current]); setSelectedJob(job); navigatePage("jobs"); void refreshData(); }} />
       : activePage === "jobs"
         ? <JobsPage jobs={jobs} onRefresh={refreshData} onOpenJob={setSelectedJob} onDeleteJob={(job) => void removeJob(job)} />
         : activePage === "reports"
           ? <ReportsPage jobs={jobs} onOpenJob={setSelectedJob} notify={notify} />
           : activePage === "profiles"
-            ? <ProfilesPage onApply={(patch) => { setJobPreset({ id: Date.now(), patch }); setActivePage("new-job"); }} />
-            : <AdminPage notify={notify} />;
+            ? <ProfilesPage onApply={(patch) => { setJobPreset({ id: Date.now(), patch }); navigatePage("new-job"); }} />
+            : activePage === "admin"
+              ? <AdminPage notify={notify} />
+              : <OpsPage notify={notify} />;
 
   const currentDrawerWidth = collapsed ? collapsedWidth : drawerWidth;
 
@@ -1564,11 +1850,11 @@ export default function App() {
             ) : null}
           </Stack>
           <List sx={{ px: 1 }}>
-            {Object.entries(navItems).map(([key, item]) => (
+            {visibleNavItems.map(([key, item]) => (
               <ListItemButton
                 key={key}
                 selected={activePage === key}
-                onClick={() => setActivePage(key as PageKey)}
+                onClick={() => navigatePage(key)}
                 sx={{ borderRadius: 2, minHeight: 44, mb: 0.5, justifyContent: collapsed ? "center" : "flex-start" }}
               >
                 <ListItemIcon sx={{ minWidth: collapsed ? 0 : 40, color: "inherit" }}>{item.icon}</ListItemIcon>
@@ -1579,13 +1865,13 @@ export default function App() {
           <Box sx={{ flex: 1 }} />
           {!collapsed ? <Typography variant="caption" color="text.secondary" sx={{ p: 2 }}>本地控制台 v5</Typography> : null}
         </Drawer>
-        <Box className="mobile-nav" component="nav">
-          {Object.entries(navItems).map(([key, item]) => (
+        <Box className="mobile-nav" component="nav" sx={{ gridTemplateColumns: `repeat(${visibleNavItems.length}, minmax(0, 1fr))` }}>
+          {visibleNavItems.map(([key, item]) => (
             <button
               key={key}
               type="button"
               className={activePage === key ? "mobile-nav-item active" : "mobile-nav-item"}
-              onClick={() => setActivePage(key as PageKey)}
+              onClick={() => navigatePage(key)}
             >
               <span>{item.icon}</span>
               <small>{item.label}</small>
@@ -1617,7 +1903,7 @@ export default function App() {
             </Toolbar>
           </AppBar>
           <Box className="app-content">
-            <PageMasthead page={activePage} onNewJob={() => setActivePage("new-job")} />
+            <PageMasthead page={activePage} onNewJob={() => navigatePage("new-job")} />
             {page}
           </Box>
         </Box>

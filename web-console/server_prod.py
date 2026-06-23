@@ -11,9 +11,11 @@ import asyncio
 import json
 import logging
 import os
+import platform
 import re
 import secrets
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -63,7 +65,7 @@ JOB_ROOT.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(WEB_ROOT))
 from common import (  # noqa: E402
     JOBS, JOBS_LOCK, UPLOAD_ROOT,
-    build_command, discover_environment_defaults,
+    build_command, discover_environment_defaults, path_exists,
     find_default_shell_apk, make_command_preview, now_iso, snapshot_job, delete_job_snapshot,
     append_job_log as _orig_append_log, update_job as _orig_update_job,
     run_job as _orig_run_job, _run_job_safe as _orig_run_job_safe,
@@ -1156,14 +1158,14 @@ async def login(body: LoginRequest, request: Request):
     token, expires_in = create_token(body.username)
     return {
         "token": token, "expires_in": expires_in, "username": body.username,
-        "tier": tier, "tier_limits": limits,
+        "tier": tier, "tier_limits": limits, "is_admin": body.username == ADMIN_USER,
     }
 
 @app.get("/api/auth/check")
 async def auth_check(username: str = Depends(verify_token)):
     tier = await db_get_user_tier(username)
     limits = TIER_LIMITS.get(tier, TIER_LIMITS["free"])
-    return {"ok": True, "username": username, "tier": tier, "tier_limits": limits}
+    return {"ok": True, "username": username, "tier": tier, "tier_limits": limits, "is_admin": username == ADMIN_USER}
 
 @app.post("/api/auth/change-password")
 async def change_password(body: ChangePasswordRequest, username: str = Depends(verify_token)):
@@ -1238,6 +1240,140 @@ async def admin_delete_user(target_user: str, username: str = Depends(_require_a
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail=f"user not found: {target_user}")
     return {"ok": True, "deleted": target_user}
+
+def _path_state(path: Path | str | None, *, kind: str = "file") -> dict[str, Any]:
+    if not path:
+        return {"path": "", "exists": False, "kind": kind}
+    item = Path(path)
+    exists = item.exists()
+    state: dict[str, Any] = {
+        "path": str(item),
+        "exists": exists,
+        "kind": kind,
+        "is_file": item.is_file() if exists else False,
+        "is_dir": item.is_dir() if exists else False,
+    }
+    try:
+        if exists:
+            state["size"] = item.stat().st_size if item.is_file() else None
+            state["writable"] = os.access(str(item if item.is_dir() else item.parent), os.W_OK)
+    except Exception:
+        state["writable"] = False
+    return state
+
+def _command_version(command: list[str]) -> dict[str, Any]:
+    label = " ".join(command)
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=str(REPO_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=8,
+        )
+        output = (completed.stdout or "").strip().splitlines()
+        return {
+            "command": label,
+            "ok": completed.returncode == 0,
+            "returncode": completed.returncode,
+            "version": output[0][:240] if output else "",
+        }
+    except Exception as exc:
+        return {"command": label, "ok": False, "returncode": None, "version": "", "error": str(exc)}
+
+async def _database_state() -> dict[str, Any]:
+    if not _db_pool:
+        return {"connected": False, "checked": False}
+    started = time.perf_counter()
+    try:
+        async with _db_pool.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+        return {
+            "connected": True,
+            "checked": True,
+            "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+        }
+    except Exception as exc:
+        return {
+            "connected": False,
+            "checked": True,
+            "error": str(exc)[:240],
+        }
+
+@app.get("/api/admin/diagnostics")
+async def admin_diagnostics(username: str = Depends(_require_admin)):
+    defaults = discover_environment_defaults()
+    default_shell = find_default_shell_apk()
+    env_names = [
+        "ENKO_PRODUCTION",
+        "ENKO_PUBLIC_API_REDACTION",
+        "ENKO_CORS_ORIGINS",
+        "ENKO_HOST",
+        "ENKO_PORT",
+        "ENKO_WORKERS",
+        "ENKO_DATABASE_URL",
+        "ANDROID_HOME",
+        "ANDROID_SDK_ROOT",
+        "JAVA_HOME",
+        "GRADLE_USER_HOME",
+    ]
+    env = {name: ("set" if os.environ.get(name) else "") for name in env_names}
+    if os.environ.get("ENKO_DATABASE_URL"):
+        env["ENKO_DATABASE_URL"] = "set"
+    database = await _database_state()
+    return {
+        "ok": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "server": {
+            "python": sys.version.split()[0],
+            "platform": platform.platform(),
+            "executable": sys.executable,
+            "cwd": os.getcwd(),
+            "uid": os.getuid() if hasattr(os, "getuid") else None,
+        },
+        "flags": {
+            "production": PRODUCTION,
+            "public_api_redaction": PUBLIC_API_REDACTION,
+            "public_docs_enabled": ENABLE_PUBLIC_DOCS,
+            "monitor_token_configured": bool(MONITOR_TOKEN),
+            "cors_origins": CORS_ORIGINS,
+        },
+        "paths": {
+            "repo_root": _path_state(REPO_ROOT, kind="dir"),
+            "web_root": _path_state(WEB_ROOT, kind="dir"),
+            "job_root": _path_state(JOB_ROOT, kind="dir"),
+            "upload_root": _path_state(UPLOAD_ROOT, kind="dir"),
+            "output": _path_state(REPO_ROOT / "output", kind="dir"),
+            "react_dist": _path_state(WEB_ROOT / "react-dist" / "index.html"),
+            "packer": _path_state(REPO_ROOT / "packer" / "harden_apk.py"),
+            "release_manifest": _path_state(REPO_ROOT / "release" / "release_manifest.json"),
+        },
+        "shell": {
+            "available": default_shell is not None,
+            "default": _path_state(default_shell),
+            "candidates": [
+                _path_state(REPO_ROOT / "shell-app" / "app" / "build" / "outputs" / "apk" / "release" / "app-release-unsigned.apk"),
+                _path_state(REPO_ROOT / "shell-app" / "app" / "build" / "outputs" / "apk" / "release" / "app-release.apk"),
+                _path_state(REPO_ROOT / "shell-app" / "app" / "build" / "outputs" / "apk" / "debug" / "app-debug.apk"),
+            ],
+        },
+        "toolchain": {
+            name: {**_path_state(value), "configured": bool(value), "usable": bool(value and path_exists(value))}
+            for name, value in defaults.items()
+        },
+        "commands": {
+            "java": _command_version(["java", "-version"]),
+            "python": _command_version([sys.executable, "--version"]),
+            "git": _command_version(["git", "--version"]),
+            "node": _command_version(["node", "--version"]),
+            "npm": _command_version(["npm", "--version"]),
+        },
+        "database": database,
+        "environment": env,
+    }
 
 @app.get("/api/tier-info")
 async def tier_info(username: str = Depends(verify_token)):
