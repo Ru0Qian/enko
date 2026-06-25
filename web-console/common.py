@@ -118,7 +118,12 @@ def path_exists(path_text: str) -> bool:
 
 def looks_like_placeholder(path_text: str) -> bool:
     lowered = (path_text or "").strip().lower()
-    return not lowered or "your-version" in lowered or lowered.endswith("\\ndk")
+    return (
+        not lowered
+        or "your-version" in lowered
+        or lowered.endswith("\\ndk")
+        or lowered == "<auto-detected>"
+    )
 
 
 def version_key(path: Path) -> tuple[int, ...]:

@@ -1722,6 +1722,11 @@ async def create_job_endpoint(request: Request, username: str = Depends(verify_t
                 "message": "服务端缺少 packer/harden_apk.py，请检查部署目录是否完整。",
                 "error_code": "PACKER_MISSING",
             })
+        if "ndk not found" in low:
+            raise HTTPException(status_code=503, detail={
+                "message": "服务端未检测到 Android NDK。VMP/DEX2C 需要 NDK 编译 native 代码，请联系管理员检查 ANDROID_NDK_HOME 或 /opt/android-sdk/ndk/。",
+                "error_code": "NDK_MISSING",
+            })
         if "invalid auto-protect profile" in low:
             raise HTTPException(status_code=400, detail={
                 "message": "智能保护档位无效，请重新选择兼容/均衡/强保护/极限。",
