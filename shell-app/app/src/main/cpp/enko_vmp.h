@@ -135,6 +135,30 @@ typedef struct {
     vmp_try_block_t *tries;
 } vmp_method_tries_t;
 
+/* ── VMP v5 layout descriptor ───────────────────────────────────────── */
+/* Per-build operand-field byte positions within each width class.
+ * Mirrors derive_v5_layout_table() in packer/vmp_compiler.py.
+ * Opcode is always at byte 0 (anchored) so no opcode_pos field. */
+typedef struct {
+    uint8_t dst_pos;
+    uint8_t src1_pos;
+    uint8_t src2_pos;
+    uint8_t nargs_pos;
+    uint8_t multi_start;  /* contiguous payload start */
+    uint8_t multi_len;    /* contiguous payload length */
+    uint8_t valid;        /* 1 if layout populated, 0 if width class unused */
+    uint8_t reserved;
+} vmp_v5_layout_t;
+
+/* Width-class index: layouts[VMP_V5_LAYOUT_W2] etc. */
+#define VMP_V5_LAYOUT_W2   0
+#define VMP_V5_LAYOUT_W4   1
+#define VMP_V5_LAYOUT_W6   2
+#define VMP_V5_LAYOUT_W8   3
+#define VMP_V5_LAYOUT_W12  4
+#define VMP_V5_LAYOUT_W16  5
+#define VMP_V5_LAYOUT_COUNT 6
+
 /* ── VMP runtime context ────────────────────────────────────────────── */
 
 #define VMP_MAX_REGS 256
@@ -158,6 +182,16 @@ typedef struct {
     uint32_t      bytecode_size;
     vmp_method_tries_t *method_tries; /* per-method try-catch tables */
     int           core_tier;          /* VMP_TIER_* runtime core profile */
+
+    /* v5-only fields. blob_version is 4 or 5; the v5 tables are
+     * populated only when blob_version == 5. */
+    uint32_t      blob_version;
+    uint32_t      v5_width_table_seed;
+    uint32_t      v5_operand_layout_seed;
+    uint32_t      v5_format_flags;
+    uint8_t       v5_width_table[256];   /* real_op → width (bytes) */
+    vmp_v5_layout_t v5_layouts[VMP_V5_LAYOUT_COUNT];
+
     /* Loaded flag */
     int           loaded;
 } vmp_context_t;

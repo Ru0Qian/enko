@@ -80,6 +80,29 @@ OBFSTR_DECL(obs_sig_cls, 0xEF,0xEE,0x8B,0xAD,0xA6,0xB1,0xA6,0xE8,0xAB,0xA6,0xA9,
 OBFSTR_DECL(obs_vmp_magic, 0x8A,0xF5,0xB1,0x8C,0xF0,0xB7,0x96,0xFE,0xA3,0x8B,0xF3);
 static uint8_t kVmpMagic[12];  /* filled at load time */
 static const uint32_t kVmpVersion = 4;  /* v4: encrypted string pool */
+static const uint32_t kVmpVersionV5 = 5;  /* v5: variable-length insns + per-build width/layout */
+
+/* v5 width-class table mirroring _OP_WIDTH_BASE in vmp_compiler.py.
+ * The loader uses this to derive the per-build width_table; the
+ * dispatch loop uses it to advance the byte-offset PC after each insn. */
+#define VMP_V5_W2  2
+#define VMP_V5_W4  4
+#define VMP_V5_W6  6
+#define VMP_V5_W8  8
+#define VMP_V5_W12 12
+#define VMP_V5_W16 16
+
+static int vmp_v5_layout_index_for_width(uint8_t w) {
+    switch (w) {
+        case VMP_V5_W2:  return VMP_V5_LAYOUT_W2;
+        case VMP_V5_W4:  return VMP_V5_LAYOUT_W4;
+        case VMP_V5_W6:  return VMP_V5_LAYOUT_W6;
+        case VMP_V5_W8:  return VMP_V5_LAYOUT_W8;
+        case VMP_V5_W12: return VMP_V5_LAYOUT_W12;
+        case VMP_V5_W16: return VMP_V5_LAYOUT_W16;
+        default: return -1;
+    }
+}
 
 #define VMP_BINOP_REG0_SENTINEL ((int32_t)0x6E4B0001)
 #define VMP_BINOP_LIT_ZERO_SENTINEL ((int32_t)0x6E4B0002)
@@ -104,6 +127,177 @@ static void vmp_crypt_string(uint8_t *data, uint16_t len, uint32_t salt, uint32_
         seed = vmp_lfsr32(seed ? seed : 0xD00DF00DU);
         data[i] ^= (uint8_t)((seed >> ((i & 3U) * 8U)) & 0xFFU);
         data[i] ^= (uint8_t)((string_idx * 131U + (uint32_t)i * 17U + 0x5DU) & 0xFFU);
+    }
+}
+
+/* ── v5 width / layout derivation ───────────────────────────────────────
+ * Mirrors derive_v5_width_table() and derive_v5_layout_table() in
+ * packer/vmp_compiler.py. The Python side is the source of truth; this
+ * C implementation must produce bit-identical tables for the same seed
+ * pair, otherwise the interpreter and compiler will disagree about
+ * insn width and operand positions and the program will execute
+ * garbage.
+ *
+ * The base width-per-real_op map is hard-coded below — same content as
+ * _OP_WIDTH_BASE in vmp_compiler.py. Default for any unlisted op is W8.
+ */
+
+static uint8_t vmp_v5_base_width(int real_op) {
+    switch (real_op) {
+        /* W2 — zero-operand */
+        case 0:   /* NOP */
+        case 8:   /* RETURN_VOID */
+            return VMP_V5_W2;
+
+        /* W4 — 1-reg / 2-reg, no immediate */
+        case 1: case 2: case 3:          /* MOVE / MOVE_WIDE / MOVE_OBJECT */
+        case 4: case 5: case 6:          /* MOVE_RESULT / _WIDE / _OBJECT */
+        case 7:                          /* MOVE_EXCEPTION */
+        case 9: case 10: case 11:        /* RETURN / RETURN_WIDE / RETURN_OBJECT */
+        case 16: case 17:                /* MONITOR_ENTER / MONITOR_EXIT */
+        case 22:                         /* ARRAY_LENGTH */
+        case 23:                         /* THROW */
+        case 84: case 85: case 86: case 87:  /* NEG_INT / NOT_INT / NEG_LONG / NOT_LONG */
+        case 88: case 89:                /* NEG_FLOAT / NEG_DOUBLE */
+        case 90: case 91: case 92:       /* INT_TO_{LONG,FLOAT,DOUBLE} */
+        case 93: case 94: case 95:       /* LONG_TO_{INT,FLOAT,DOUBLE} */
+        case 96: case 97: case 98:       /* FLOAT_TO_{INT,LONG,DOUBLE} */
+        case 99: case 100: case 101:     /* DOUBLE_TO_{INT,LONG,FLOAT} */
+        case 102: case 103: case 104:    /* INT_TO_{BYTE,CHAR,SHORT} */
+        case 160: case 161: case 162:
+        case 163: case 164:              /* UNOP_ALIAS1..5 */
+            return VMP_V5_W4;
+
+        /* W12 — 64-bit immediates */
+        case 13:    /* CONST_WIDE */
+        case 147:   /* CONST_WIDE_HI32 */
+            return VMP_V5_W12;
+
+        /* W16 — invokes, switches, fill-array (uniform regardless of arity) */
+        case 79: case 80: case 81: case 82: case 83:  /* INVOKE_{VIRTUAL,SUPER,DIRECT,STATIC,INTERFACE} */
+        case 142: case 143:              /* PACKED_SWITCH / SPARSE_SWITCH */
+        case 144:                        /* FILL_ARRAY_DATA */
+        case 145:                        /* FILLED_NEW_ARRAY */
+        case 146:                        /* INVOKE_ARGS (consumed by preceding invoke) */
+        case 148: case 149:              /* INVOKE_CUSTOM / INVOKE_POLYMORPHIC */
+            return VMP_V5_W16;
+
+        default:
+            return VMP_V5_W8;
+    }
+}
+
+static void vmp_v5_derive_width_table(uint8_t out[256], uint32_t width_seed) {
+    /* The Python implementation permutes ops *within* each width class
+     * via LFSR, but since the per-real_op width never changes between
+     * permutation slots in that algorithm, the final 256-entry table
+     * just contains base_width(op) for each op. We replicate that
+     * here. The width_seed parameter is reserved for future use where
+     * the slot-permutation actually changes the wire encoding. */
+    (void)width_seed;
+    for (int op = 0; op < 256; ++op) {
+        out[op] = vmp_v5_base_width(op);
+    }
+}
+
+/* xorshift32 — matches the inline LFSR in derive_v5_layout_table(). */
+static uint32_t vmp_v5_xorshift_next(uint32_t *state) {
+    uint32_t s = *state;
+    s ^= (s << 13);
+    s ^= (s >> 17);
+    s ^= (s << 5);
+    *state = s ? s : 0x13579BDFU;
+    return *state;
+}
+
+static void vmp_v5_derive_layouts(vmp_v5_layout_t out[VMP_V5_LAYOUT_COUNT], uint32_t layout_seed) {
+    uint32_t state = layout_seed ? layout_seed : 0x13579BDFU;
+
+    /* Per-class spec: number of 1-byte slots (excluding opcode, which
+     * is anchored to byte 0), optional contiguous multi-byte payload
+     * length. The order of 1-byte slot names is fixed:
+     *   W2:  arg0
+     *   W4:  dst, src1, pad
+     *   W6:  dst                              + multi 4
+     *   W8:  dst, src1, src2                  + multi 4
+     *   W12: dst                              + multi 10
+     *   W16: dst, nargs                       + multi 13
+     */
+    struct {
+        uint8_t width;
+        uint8_t single_count;
+        uint8_t multi_len;
+    } SPECS[] = {
+        {VMP_V5_W2,  1, 0},
+        {VMP_V5_W4,  3, 0},
+        {VMP_V5_W6,  1, 4},
+        {VMP_V5_W8,  3, 4},
+        {VMP_V5_W12, 1, 10},
+        {VMP_V5_W16, 2, 13},
+    };
+
+    for (int i = 0; i < VMP_V5_LAYOUT_COUNT; ++i) {
+        uint8_t w = SPECS[i].width;
+        uint8_t sc = SPECS[i].single_count;
+        uint8_t ml = SPECS[i].multi_len;
+        vmp_v5_layout_t *L = &out[i];
+        memset(L, 0, sizeof(*L));
+        L->valid = 1;
+
+        uint8_t free_positions[16] = {0};
+        int free_count = 0;
+        for (int p = 1; p < w; ++p) free_positions[free_count++] = (uint8_t)p;
+
+        if (ml == 0) {
+            /* No multi-byte field — just permute single slots into free positions. */
+            /* Fisher-Yates */
+            for (int k = free_count - 1; k > 0; --k) {
+                uint32_t r = vmp_v5_xorshift_next(&state);
+                int j = (int)(r % (uint32_t)(k + 1));
+                uint8_t t = free_positions[k];
+                free_positions[k] = free_positions[j];
+                free_positions[j] = t;
+            }
+            int p = 0;
+            if (sc >= 1) L->dst_pos    = free_positions[p++];
+            if (sc >= 2) L->src1_pos   = free_positions[p++];
+            if (sc >= 3) L->src2_pos   = free_positions[p++];
+        } else {
+            /* Pick multi-byte start from valid range [1, w-ml]. */
+            int valid_start_count = (int)(w - ml + 1 - 1);  /* inclusive [1..w-ml] */
+            if (valid_start_count < 1) valid_start_count = 1;
+            uint32_t r = vmp_v5_xorshift_next(&state);
+            uint8_t multi_start = (uint8_t)(1 + (r % (uint32_t)valid_start_count));
+            L->multi_start = multi_start;
+            L->multi_len = ml;
+
+            /* Remaining 1-byte positions: bytes [1..w-1] minus [multi_start..multi_start+ml-1]. */
+            uint8_t remaining[16] = {0};
+            int rcount = 0;
+            for (int p = 1; p < w; ++p) {
+                if (!(p >= multi_start && p < multi_start + ml)) {
+                    remaining[rcount++] = (uint8_t)p;
+                }
+            }
+            /* Fisher-Yates on remaining. */
+            for (int k = rcount - 1; k > 0; --k) {
+                uint32_t r2 = vmp_v5_xorshift_next(&state);
+                int j = (int)(r2 % (uint32_t)(k + 1));
+                uint8_t t = remaining[k];
+                remaining[k] = remaining[j];
+                remaining[j] = t;
+            }
+            int p = 0;
+            if (sc >= 1) L->dst_pos   = remaining[p++];
+            if (sc >= 2) L->src1_pos  = remaining[p++];  /* W8: dst, src1, src2; W16: dst, nargs */
+            if (sc >= 3) L->src2_pos  = remaining[p++];
+            /* W16: 'src1' slot here is actually nargs. We store it
+             * in src1_pos and the dispatcher reads it from there. */
+            if (w == VMP_V5_W16) {
+                L->nargs_pos = L->src1_pos;
+                L->src1_pos = 0;
+            }
+        }
     }
 }
 
@@ -1576,15 +1770,42 @@ int enko_vmp_load(const uint8_t *blob, size_t blob_len) {
 
     uint32_t version = 0;
     if (rd_u32(&r, &version) != 0) goto fail;
-    if (version != kVmpVersion) {
-        LOGE("VMP blob version mismatch: got=%u expected=%u", version, kVmpVersion);
+    if (version != kVmpVersion && version != kVmpVersionV5) {
+        LOGE("VMP blob version mismatch: got=%u expected=%u or %u",
+             version, kVmpVersion, kVmpVersionV5);
         goto fail;
+    }
+    g_vmp.blob_version = version;
+
+    uint32_t string_salt = 0;
+
+    if (version == kVmpVersionV5) {
+        /* v5 extended header: header_size, format_flags, width_seed,
+         * layout_seed, string_pool_salt, reserved. */
+        uint32_t extra_size = 0;
+        if (rd_u32(&r, &extra_size) != 0) goto fail;
+        if (extra_size < 24 || extra_size > 4096) goto fail;
+        if (rd_u32(&r, &g_vmp.v5_format_flags) != 0) goto fail;
+        if (rd_u32(&r, &g_vmp.v5_width_table_seed) != 0) goto fail;
+        if (rd_u32(&r, &g_vmp.v5_operand_layout_seed) != 0) goto fail;
+        if (rd_u32(&r, &string_salt) != 0) goto fail;
+        uint32_t reserved = 0;
+        if (rd_u32(&r, &reserved) != 0) goto fail;
+        /* Skip any forward-compat bytes past the 24 we just read. */
+        if (extra_size > 24) {
+            if (r.off + (extra_size - 24) > r.len) goto fail;
+            r.off += extra_size - 24;
+        }
+        /* Derive runtime tables from seeds. */
+        vmp_v5_derive_width_table(g_vmp.v5_width_table, g_vmp.v5_width_table_seed);
+        vmp_v5_derive_layouts(g_vmp.v5_layouts, g_vmp.v5_operand_layout_seed);
     }
 
     if (rd_bytes(&r, g_vmp.opcode_table, 256) != 0) goto fail;
 
-    uint32_t string_salt = 0;
-    if (rd_u32(&r, &string_salt) != 0) goto fail;
+    if (version == kVmpVersion) {
+        if (rd_u32(&r, &string_salt) != 0) goto fail;
+    }
     if (rd_u32(&r, &g_vmp.string_count) != 0) goto fail;
     if (g_vmp.string_count > 1000000U) goto fail;
     if (g_vmp.string_count > 0) {
@@ -2074,8 +2295,258 @@ done:
 }
 
 __attribute__((annotate("sub")))
+/* ── v5 dispatch (session 2: 15 simple opcodes) ─────────────────────────
+ *
+ * Independent code path from the v4 dispatcher above. Walks the
+ * bytecode stream as a byte-offset PC, reads opcode at byte 0 (anchored
+ * per format spec), looks up width and operand layout from per-build
+ * tables derived at load time.
+ *
+ * This session implements a *minimal viable* opcode set so smoke
+ * methods (NOP, simple moves, basic arithmetic, branches, returns) can
+ * run end-to-end. Sessions 3 and 4 port the remaining ~140 handlers
+ * and add full parity testing.
+ *
+ * Any opcode not implemented here returns NULL with a runtime
+ * exception, so a misconfigured production deploy fails loudly rather
+ * than silently producing wrong values.
+ */
+static jobject vmp_run_interpreter_v5(JNIEnv *env, const vmp_method_t *method,
+                                       vmp_reg_t regs[VMP_MAX_REGS]) {
+    if (method->bytecode_off < 0 || method->bytecode_size < 0) {
+        vmp_throw_runtime(env, "v5: invalid VMP method bytecode range");
+        return NULL;
+    }
+    if ((uint32_t)method->bytecode_off + (uint32_t)method->bytecode_size > _active_ctx->bytecode_size) {
+        vmp_throw_runtime(env, "v5: VMP method bytecode out of range");
+        return NULL;
+    }
+
+    const uint8_t *bc = _active_ctx->bytecode + method->bytecode_off;
+    const uint32_t bc_len = (uint32_t)method->bytecode_size;
+    const uint8_t *width_tbl = _active_ctx->v5_width_table;
+    const uint8_t *opcode_table = _active_ctx->opcode_table;
+
+    /* PushLocalFrame mirrors v4 — JNI locals from this method
+     * accumulate in a frame released on return. */
+    if ((*env)->PushLocalFrame(env, 256) < 0) {
+        vmp_throw_runtime(env, "v5: PushLocalFrame failed");
+        return NULL;
+    }
+
+    uint32_t pc = 0;
+    int returned = 0;
+    int return_op = VMP_RETURN_VOID;
+    vmp_reg_t ret_reg;
+    memset(&ret_reg, 0, sizeof(ret_reg));
+
+    /* Step budget — bytecode size in bytes × small factor. */
+    uint32_t step_budget = bc_len * 64U + 4096U;
+    if (step_budget > 1U << 24) step_budget = 1U << 24;
+
+    while (pc < bc_len) {
+        if (step_budget-- == 0) {
+            vmp_throw_runtime(env, "v5: step budget exhausted");
+            (*env)->PopLocalFrame(env, NULL);
+            return NULL;
+        }
+
+        uint8_t op_byte = bc[pc + 0];  /* opcode anchored at byte 0 */
+        int real_op = opcode_table[op_byte];
+        if (real_op < 0 || real_op >= VMP_OP_COUNT) {
+            vmp_throw_runtime(env, "v5: opcode out of range");
+            (*env)->PopLocalFrame(env, NULL);
+            return NULL;
+        }
+        uint8_t width = width_tbl[real_op];
+        int layout_idx = vmp_v5_layout_index_for_width(width);
+        if (layout_idx < 0 || pc + width > bc_len) {
+            vmp_throw_runtime(env, "v5: width overrun");
+            (*env)->PopLocalFrame(env, NULL);
+            return NULL;
+        }
+        const vmp_v5_layout_t *L = &_active_ctx->v5_layouts[layout_idx];
+
+        /* Pre-extract common operand bytes; not all opcodes use them. */
+        uint8_t dst   = (width >= VMP_V5_W4)  ? bc[pc + L->dst_pos]  : 0;
+        uint8_t src1  = (width == VMP_V5_W4 || width == VMP_V5_W8) ? bc[pc + L->src1_pos] : 0;
+        uint8_t src2  = (width == VMP_V5_W8)  ? bc[pc + L->src2_pos] : 0;
+        int32_t imm32 = 0;
+        if (width == VMP_V5_W8) {
+            memcpy(&imm32, bc + pc + L->multi_start, 4);
+        }
+        int64_t imm64 = 0;
+        if (width == VMP_V5_W12) {
+            memcpy(&imm64, bc + pc + L->multi_start, 8);
+        }
+
+        uint32_t next_pc = pc + width;
+
+        switch (real_op) {
+            case VMP_NOP:
+                break;
+
+            case VMP_MOVE:
+            case VMP_MOVE_WIDE:
+            case VMP_MOVE_OBJECT:
+                regs[dst] = regs[src1];
+                break;
+
+            case VMP_MOVE_RESULT:
+            case VMP_MOVE_RESULT_WIDE:
+            case VMP_MOVE_RESULT_OBJECT:
+                /* Session-2 simplification: we don't yet have a
+                 * v5-side last_result staging (invokes aren't
+                 * implemented), so move_result is a no-op. */
+                break;
+
+            case VMP_MOVE_EXCEPTION:
+                /* No exception handling in session 2. */
+                regs[dst].l = NULL;
+                break;
+
+            case VMP_RETURN_VOID:
+                returned = 1;
+                return_op = VMP_RETURN_VOID;
+                break;
+
+            case VMP_RETURN:
+                returned = 1;
+                return_op = VMP_RETURN;
+                ret_reg = regs[dst];  /* dst doubles as the return-source reg */
+                break;
+
+            case VMP_RETURN_WIDE:
+                returned = 1;
+                return_op = VMP_RETURN_WIDE;
+                ret_reg = regs[dst];
+                break;
+
+            case VMP_RETURN_OBJECT:
+                returned = 1;
+                return_op = VMP_RETURN_OBJECT;
+                ret_reg = regs[dst];
+                break;
+
+            case VMP_NEG_INT:
+                regs[dst].i = -regs[src1].i;
+                break;
+
+            case VMP_INT_TO_LONG:
+                regs[dst].j = (int64_t)regs[src1].i;
+                break;
+
+            case VMP_ADD_INT:
+                regs[dst].i = regs[src1].i + regs[src2].i;
+                break;
+
+            case VMP_SUB_INT:
+                regs[dst].i = regs[src1].i - regs[src2].i;
+                break;
+
+            case VMP_GOTO:
+                /* W8: imm32 is the byte-offset branch target relative to current PC. */
+                next_pc = (uint32_t)((int32_t)pc + imm32);
+                if (next_pc >= bc_len) {
+                    vmp_throw_runtime(env, "v5: goto out of bounds");
+                    (*env)->PopLocalFrame(env, NULL);
+                    return NULL;
+                }
+                break;
+
+            case VMP_IF_EQZ:
+                if (regs[dst].j == 0) {
+                    next_pc = (uint32_t)((int32_t)pc + imm32);
+                    if (next_pc >= bc_len) {
+                        vmp_throw_runtime(env, "v5: if_eqz target out of bounds");
+                        (*env)->PopLocalFrame(env, NULL);
+                        return NULL;
+                    }
+                }
+                break;
+
+            case VMP_IF_EQ:
+                /* W8: dst = lhs reg, src1 = rhs reg, imm32 = branch byte-offset. */
+                if (regs[dst].i == regs[src1].i) {
+                    next_pc = (uint32_t)((int32_t)pc + imm32);
+                    if (next_pc >= bc_len) {
+                        vmp_throw_runtime(env, "v5: if_eq target out of bounds");
+                        (*env)->PopLocalFrame(env, NULL);
+                        return NULL;
+                    }
+                }
+                break;
+
+            case VMP_MONITOR_ENTER:
+                if (regs[dst].l) {
+                    (*env)->MonitorEnter(env, regs[dst].l);
+                }
+                break;
+
+            case VMP_MONITOR_EXIT:
+                if (regs[dst].l) {
+                    (*env)->MonitorExit(env, regs[dst].l);
+                }
+                break;
+
+            case VMP_ARRAY_LENGTH:
+                if (regs[src1].l == NULL) {
+                    vmp_throw_runtime(env, "v5: array-length on NULL");
+                    (*env)->PopLocalFrame(env, NULL);
+                    return NULL;
+                }
+                regs[dst].i = (int32_t)(*env)->GetArrayLength(env, (jarray)regs[src1].l);
+                break;
+
+            default: {
+                char msg[96];
+                snprintf(msg, sizeof(msg),
+                         "v5: opcode %d not implemented (session 2 minimal set)",
+                         real_op);
+                vmp_throw_runtime(env, msg);
+                (*env)->PopLocalFrame(env, NULL);
+                return NULL;
+            }
+        }
+
+        if (returned) break;
+        pc = next_pc;
+    }
+
+    /* Box / surface return value, mirroring v4's return-value packaging. */
+    jobject ret_obj = NULL;
+    switch (return_op) {
+        case VMP_RETURN_VOID:
+            ret_obj = NULL;
+            break;
+        case VMP_RETURN:
+        case VMP_RETURN_WIDE:
+        case VMP_RETURN_OBJECT:
+            /* Session 2: we don't auto-box ints/longs yet; that lives
+             * in the v4 path's vmp_box_cache. For RETURN_OBJECT we can
+             * just return the jobject. */
+            if (return_op == VMP_RETURN_OBJECT) {
+                ret_obj = ret_reg.l;
+            } else {
+                /* Smoke methods returning int/long are out of scope
+                 * for session 2; the auto-boxing wiring lands in
+                 * session 3 alongside field/invoke handlers. */
+                vmp_throw_runtime(env, "v5: int/long boxed return not yet implemented");
+            }
+            break;
+        default:
+            break;
+    }
+    return (*env)->PopLocalFrame(env, ret_obj);
+}
+
 static jobject vmp_run_interpreter(JNIEnv *env, const vmp_method_t *method,
                                     vmp_reg_t regs[VMP_MAX_REGS]) {
+    /* v5 blobs route through their own dispatcher. */
+    if (_active_ctx->blob_version == kVmpVersionV5) {
+        return vmp_run_interpreter_v5(env, method, regs);
+    }
+
     if (method->bytecode_off < 0 || method->bytecode_size < 0) {
         vmp_throw_runtime(env, "invalid VMP method bytecode range");
         return NULL;
