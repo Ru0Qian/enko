@@ -30,7 +30,7 @@ from dex_parser import (
     compute_dex_checksum, compute_dex_signature,
 )
 from dex_writer import patch_methods_to_native
-from dex2c.translator import translate_method, D2CMethod, D2CResult
+from dex2c.translator import translate_method, D2CMethod, D2CResult, method_d2c_eligibility
 
 
 # ---------------------------------------------------------------------------
@@ -648,6 +648,7 @@ def run_dex2c_compilation(
     translated: list[D2CMethod] = []
     compiled_indices: dict[int, list[int]] = {}  # dex_idx → [method_idx, ...]
     compiled_set: set[tuple[int, int]] = set()  # (dex_idx, method_idx)
+    d2c_skipped_by_reason: dict[str, int] = {}
 
     for class_desc, method_name, sig in targets:
         matched = False
@@ -710,6 +711,21 @@ def run_dex2c_compilation(
                 if em.code.insns_size == 0:
                     continue
 
+                eligible, reason = method_d2c_eligibility(em.code)
+                if not eligible:
+                    # Method uses opcodes DEX2C cannot translate (typically
+                    # Kotlin lambda dispatch / invoke-custom). Tally the
+                    # reason and skip; the harden orchestrator will see this
+                    # method missing from compiled_indices and route it to
+                    # VMP or extract instead. Without this pre-check the
+                    # translator would raise NotImplementedError partway
+                    # through and the method would silently end up
+                    # unprotected.
+                    d2c_skipped_by_reason[reason] = (
+                        d2c_skipped_by_reason.get(reason, 0) + 1
+                    )
+                    continue
+
                 try:
                     m = translate_method(dex, midx, em)
                     translated.append(m)
@@ -733,6 +749,18 @@ def run_dex2c_compilation(
                 print(f"[!] {msg}")
             else:
                 raise RuntimeError(msg)
+
+    if d2c_skipped_by_reason:
+        total_skipped = sum(d2c_skipped_by_reason.values())
+        detail = ", ".join(
+            f"{reason}={count}" for reason, count in
+            sorted(d2c_skipped_by_reason.items(), key=lambda kv: -kv[1])
+        )
+        print(
+            f"[d2c] {total_skipped} method(s) routed away from DEX2C "
+            f"due to unsupported Dalvik opcodes ({detail}); "
+            f"these should fall back to VMP or method extract."
+        )
 
     if not translated:
         return 0, 0

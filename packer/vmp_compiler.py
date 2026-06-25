@@ -214,6 +214,12 @@ _reg(range(0xD8, 0xE3), "22b", 2)
 _reg([0xFA], "45cc", 4); _reg([0xFB], "4rcc", 4)
 # invoke-custom (DEX 038+)
 _reg([0xFC], "35c", 3); _reg([0xFD], "3rc", 3)
+# const-method-handle (DEX 039+) / const-method-type (DEX 039+)
+# Both encode a single 21c-form constant pool reference. Registering them
+# keeps the format parser from aborting when an opcode-stream walker (e.g.
+# the DEX2C eligibility pre-scan) encounters them in modern Kotlin / Java
+# 9+ APKs that compile lambda factories down to dynamic invokes.
+_reg([0xFE, 0xFF], "21c", 2)
 
 
 def _dalvik_insn_width(opcode: int) -> int:

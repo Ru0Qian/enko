@@ -30,7 +30,11 @@ def test_shell_symbol_aliases_include_field_names():
     class_aliases, method_aliases, field_aliases = generate_shell_symbol_aliases()
 
     assert field_aliases
-    assert set(SHELL_POLY_FIELD_NAMES).issubset(field_aliases)
+    # Names long enough to support prefix_len(5) + rank_token(2) + tail(>=1)
+    # are always aliased. Shorter ones (e.g. "buildId" at 7 chars) are
+    # intentionally left unaliased to preserve DEX string_ids ordering.
+    long_field_names = [n for n in SHELL_POLY_FIELD_NAMES if len(n) >= 8]
+    assert set(long_field_names).issubset(field_aliases)
     assert "runtimeConfig" in field_aliases
     assert "expectedSignSha256" in field_aliases
     assert len(class_aliases["ProxyApplication"]) == len("ProxyApplication")

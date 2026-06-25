@@ -259,6 +259,52 @@ def _translate_fill_array_data(lines: list[str], dex: DexFile, insns: bytes, pos
 
 
 # ---------------------------------------------------------------------------
+# Eligibility scan
+# ---------------------------------------------------------------------------
+
+# Dalvik opcodes the DEX2C translator does not (yet) emit C/JNI code for.
+# Methods containing any of these are routed away from DEX2C — they should
+# fall back to VMP or method-extract, both of which handle these opcodes.
+# Keeping this list explicit (instead of relying on the translator raising
+# NotImplementedError mid-way) lets the caller log a clean reason and pick
+# an alternate protection level instead of silently dropping the method.
+_D2C_UNSUPPORTED_OPCODES: dict[int, str] = {
+    0xFA: "invoke-polymorphic",
+    0xFB: "invoke-polymorphic/range",
+    0xFC: "invoke-custom",
+    0xFD: "invoke-custom/range",
+    0xFE: "const-method-handle",
+    0xFF: "const-method-type",
+}
+
+
+def method_d2c_eligibility(code: "CodeItem | None") -> tuple[bool, str]:
+    """Return (eligible, reason). reason is empty when eligible.
+
+    Walks the instruction stream looking for opcodes the DEX2C translator
+    cannot produce C code for. We use vmp_compiler._FMT for instruction
+    widths so the walker stays in sync with the same table VMP uses.
+    """
+    if code is None or code.insns_size == 0:
+        return False, "no code"
+    insns = code.insns
+    pos = 0
+    while pos < code.insns_size:
+        byte_off = pos * 2
+        if byte_off + 2 > len(insns):
+            return False, "truncated insn stream"
+        word0 = _u16le(insns, byte_off)
+        opcode = word0 & 0xFF
+        if opcode in _D2C_UNSUPPORTED_OPCODES:
+            return False, _D2C_UNSUPPORTED_OPCODES[opcode]
+        fmt = _FMT.get(opcode)
+        if fmt is None:
+            return False, f"unknown opcode 0x{opcode:02x}"
+        pos += fmt[1]
+    return True, ""
+
+
+# ---------------------------------------------------------------------------
 # Core translator
 # ---------------------------------------------------------------------------
 
