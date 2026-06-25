@@ -4,6 +4,7 @@ import {
   Avatar,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   Collapse,
@@ -204,7 +205,7 @@ const defaultConfig: NewJobConfig = {
   dex2cOllvm: true,
   dex2cOllvmRequired: false,
   dex2cOllvmClang: "",
-  targetAbis: "arm64-v8a",
+  targetAbis: "arm64-v8a,armeabi-v7a",
   minExtract: 120,
   minVmp: 30,
   minDex2c: 15,
@@ -233,7 +234,7 @@ const profilePresets: Array<{
       featureExtract: true,
       featureVmpDex: false,
       featureDex2c: true,
-      targetAbis: "arm64-v8a",
+      targetAbis: "arm64-v8a,armeabi-v7a",
       minScore: 80,
     },
   },
@@ -595,6 +596,25 @@ function MethodAnalysisPanel({
   const [analysis, setAnalysis] = useState<AnalyzeMethodsResult | null>(null);
   const [selected, setSelected] = useState<Record<string, number>>({});
   const [preset, setPreset] = useState("balanced");
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!loading) {
+      setElapsed(0);
+      return;
+    }
+    const start = Date.now();
+    const id = window.setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 250);
+    return () => window.clearInterval(id);
+  }, [loading]);
+
+  const phaseHint = elapsed < 5
+    ? "正在打开 APK 并解析 classes.dex..."
+    : elapsed < 20
+      ? "正在扫描方法签名与字节码..."
+      : elapsed < 60
+        ? "正在评分并按档位筛选候选方法..."
+        : "分析耗时较长，APK 较大，请耐心等待...";
 
   const recommendationRows = useMemo<MethodRecommendationRow[]>(() => {
     if (!analysis) return [];
@@ -679,7 +699,20 @@ function MethodAnalysisPanel({
         </Stack>
       }
     >
-      {!analysis ? (
+      {loading ? (
+        <Box sx={{ p: 3, border: 1, borderColor: "divider", borderRadius: 2 }}>
+          <Stack direction="row" spacing={1.5} sx={{ mb: 1.5, alignItems: "center" }}>
+            <CircularProgress size={20} />
+            <Typography sx={{ fontWeight: 700 }}>正在分析 APK 方法结构</Typography>
+            <Chip size="small" label={`${elapsed}s`} sx={{ ml: "auto" }} />
+          </Stack>
+          <LinearProgress sx={{ mb: 1.5, height: 6, borderRadius: 3 }} />
+          <Typography variant="body2" color="text.secondary">{phaseHint}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+            分析时间随 APK 体积变化，通常 5-90 秒。请勿刷新页面。
+          </Typography>
+        </Box>
+      ) : !analysis ? (
         <Box className="empty-state">
           <ScienceOutlined />
           <Typography sx={{ fontWeight: 700 }}>尚未分析</Typography>
@@ -791,6 +824,10 @@ function NewJobPage({
   async function submitJob() {
     if (!config.inputApk) {
       notify("请先上传 APK", "warning");
+      return;
+    }
+    if (!config.targetAbis.trim()) {
+      notify("请至少选择一个目标 ABI", "warning");
       return;
     }
     setCreating(true);
@@ -945,7 +982,44 @@ function NewJobPage({
                   <ToggleButton value="android">Android 原生</ToggleButton>
                   <ToggleButton value="flutter">Flutter 运行时</ToggleButton>
                 </ToggleButtonGroup>
-                <TextField size="small" label="目标 ABI" value={config.targetAbis} onChange={(event) => patch({ targetAbis: event.target.value })} />
+                <Box>
+                  <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 0.5 }}>目标 ABI (可多选)</Typography>
+                  <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.5 }}>
+                    {(
+                      [
+                        ["arm64-v8a", "ARM64 (现代机型)"],
+                        ["armeabi-v7a", "ARMv7 (旧设备)"],
+                        ["x86_64", "x86_64 (模拟器)"],
+                        ["x86", "x86 (旧模拟器)"],
+                      ] as Array<[string, string]>
+                    ).map(([abi, label]) => {
+                      const selected = (config.targetAbis || "").split(",").map((s) => s.trim()).filter(Boolean);
+                      const checked = selected.includes(abi);
+                      return (
+                        <FormControlLabel
+                          key={abi}
+                          control={
+                            <Checkbox
+                              size="small"
+                              checked={checked}
+                              onChange={(event) => {
+                                const set = new Set(selected);
+                                if (event.target.checked) set.add(abi);
+                                else set.delete(abi);
+                                const ordered = ["arm64-v8a", "armeabi-v7a", "x86_64", "x86"].filter((a) => set.has(a));
+                                patch({ targetAbis: ordered.join(",") });
+                              }}
+                            />
+                          }
+                          label={<Typography variant="body2">{label}</Typography>}
+                        />
+                      );
+                    })}
+                  </Stack>
+                  {!config.targetAbis.trim() && (
+                    <Typography variant="caption" sx={{ color: "warning.main" }}>至少选择一个 ABI</Typography>
+                  )}
+                </Box>
                 <Box className="four-column">
                   {[
                     ["minExtract", "最少 Extract"],

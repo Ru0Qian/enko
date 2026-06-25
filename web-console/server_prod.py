@@ -1701,9 +1701,41 @@ async def create_job_endpoint(request: Request, username: str = Depends(verify_t
     except HTTPException:
         raise
     except Exception as exc:
-        if PUBLIC_API_REDACTION:
-            raise HTTPException(status_code=400, detail={"message": "任务创建失败，请检查配置或联系支持。", "error_code": "JOB_CREATE_FAILED"})
-        raise HTTPException(status_code=400, detail=str(exc))
+        logger.exception("create_job failed for user=%s tier=%s", username, tier)
+        if not PUBLIC_API_REDACTION:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        msg = str(exc)
+        low = msg.lower()
+        if "shellapk is required" in low or "shell apk" in low:
+            raise HTTPException(status_code=503, detail={
+                "message": "服务端未配置默认壳 APK。请联系管理员构建 shell-app/app/build/outputs/apk/release/。",
+                "error_code": "SHELL_APK_MISSING",
+            })
+        if "inputapk is required" in low:
+            raise HTTPException(status_code=400, detail={
+                "message": "未提供输入 APK，请先在上方上传 APK 文件。",
+                "error_code": "INPUT_APK_MISSING",
+            })
+        if "missing packer script" in low:
+            raise HTTPException(status_code=503, detail={
+                "message": "服务端缺少 packer/harden_apk.py，请检查部署目录是否完整。",
+                "error_code": "PACKER_MISSING",
+            })
+        if "invalid auto-protect profile" in low:
+            raise HTTPException(status_code=400, detail={
+                "message": "智能保护档位无效，请重新选择兼容/均衡/强保护/极限。",
+                "error_code": "INVALID_PROFILE",
+            })
+        if "at least one method-protection phase" in low:
+            raise HTTPException(status_code=400, detail={
+                "message": "至少要启用一种方法保护方式（抽取 / VMP / DEX2C）。",
+                "error_code": "NO_PROTECTION_ENABLED",
+            })
+        raise HTTPException(status_code=400, detail={
+            "message": "任务创建失败，请检查配置或联系支持。",
+            "error_code": "JOB_CREATE_FAILED",
+        })
 
 @app.get("/api/jobs/{job_id}")
 async def get_job(job_id: str, username: str = Depends(verify_token)):
