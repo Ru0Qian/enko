@@ -385,6 +385,89 @@ def verify_release_obfuscation(apk_path: Path, label: str, *, allow_weak_release
     print(f"[*] {label}: obfuscation mapping verified: {mapping_path}")
 
 
+def parse_r8_mapping(mapping_path: Path) -> dict[str, dict[str, Any]]:
+    """Parse an R8 / Proguard ``mapping.txt`` file.
+
+    Returns a dict keyed by original fully-qualified class name, each value
+    holding the obfuscated FQ class name and a dict of original-method-name
+    -> obfuscated-method-name. Method overloads collapse to a single entry
+    (last wins) — this is enough for our purposes because all overloads of
+    a method share the same R8 name when ``-overloadaggressively`` is set.
+
+    The mapping format we accept::
+
+        com.x.Y -> com.a.b:
+            int someField -> a
+            void method() -> b
+            12:18:void method(int):12:18 -> c
+    """
+    classes: dict[str, dict[str, Any]] = {}
+    current_orig: str | None = None
+    with mapping_path.open(encoding="utf-8") as f:
+        for raw in f:
+            line = raw.rstrip("\n")
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            indented = line.startswith(" ") or line.startswith("\t")
+            if not indented and "->" in line and line.rstrip().endswith(":"):
+                head = line.rstrip().rstrip(":")
+                parts = head.split(" -> ")
+                if len(parts) == 2:
+                    current_orig = parts[0].strip()
+                    classes[current_orig] = {
+                        "obf_class": parts[1].strip(),
+                        "methods": {},
+                    }
+                else:
+                    current_orig = None
+                continue
+            if indented and current_orig and "->" in stripped:
+                left, _, right = stripped.partition(" -> ")
+                obf = right.strip()
+                if "(" not in left:
+                    # field line — skip, we only need methods
+                    continue
+                method_part = left[: left.index("(")]
+                # Strip optional "12:18:return_type " line-number/return-type prefix
+                tokens = method_part.split()
+                if not tokens:
+                    continue
+                last = tokens[-1]
+                # Some entries are "12:18:methodName" — take the last colon-separated token
+                if ":" in last:
+                    last = last.split(":")[-1]
+                if last:
+                    classes[current_orig]["methods"][last] = obf
+    return classes
+
+
+def translate_shell_vmp_targets_via_r8(
+    targets: list[tuple[str, str, str | None]],
+    mapping: dict[str, dict[str, Any]],
+) -> tuple[list[tuple[str, str, str | None]], int]:
+    """Translate (DEX class descriptor, java method name, signature) entries
+    through an R8 mapping. Returns the translated list and the number of
+    entries actually rewritten (i.e. found in the mapping)."""
+    translated: list[tuple[str, str, str | None]] = []
+    hits = 0
+    for cls_desc, method, sig in targets:
+        if not (cls_desc.startswith("L") and cls_desc.endswith(";")):
+            translated.append((cls_desc, method, sig))
+            continue
+        fq = cls_desc[1:-1].replace("/", ".")
+        info = mapping.get(fq)
+        if not info:
+            translated.append((cls_desc, method, sig))
+            continue
+        new_method = info["methods"].get(method, method)
+        new_cls_desc = "L" + str(info["obf_class"]).replace(".", "/") + ";"
+        translated.append((new_cls_desc, new_method, sig))
+        if new_method != method or new_cls_desc != cls_desc:
+            hits += 1
+    return translated, hits
+
+
 def which_or_fail(binary: str) -> str:
     p = shutil.which(binary)
     if p is None:
@@ -1012,23 +1095,35 @@ def _rank_token(index: int, width: int = 2) -> str:
 
 
 def _make_ranked_same_len_aliases(names: list[str], prefix_len: int = 3) -> dict[str, str]:
-    """Generate same-length Java identifier aliases that keep DEX sort stable."""
+    """Generate same-length Java identifier aliases that keep DEX sort stable.
+
+    Sort stability requires that all names sharing any prefix of length P
+    retain that same prefix in their aliases, otherwise byte-level
+    substitution can flip the lexicographic order of strings in the DEX
+    string_ids table.
+
+    Names too short to fit ``prefix_len + 2 (rank token) + 1 (tail)`` are
+    left unaliased — short names lack enough variability budget to both
+    preserve the prefix *and* differentiate from neighbors. Keeping their
+    originals costs a little polymorphism but never violates ordering.
+    """
     out: dict[str, str] = {}
     groups: dict[str, list[str]] = {}
+    min_total = prefix_len + 3  # prefix + rank_token(2) + tail(>=1)
     for name in names:
-        if len(name) < 4:
+        if len(name) < min_total:
+            # Too short to randomize while preserving prefix_len. Skip
+            # aliasing this name entirely; the substitution map will not
+            # contain it and the DEX retains the original symbol.
             continue
-        prefix = name[: min(prefix_len, max(1, len(name) - 3))]
+        prefix = name[:prefix_len]
         groups.setdefault(prefix, []).append(name)
 
     for prefix, group in groups.items():
         for idx, name in enumerate(sorted(group)):
             token = _rank_token(idx)
             keep = prefix + token
-            if len(keep) >= len(name):
-                alias = prefix + _rand_java_tail(len(name) - len(prefix))
-            else:
-                alias = keep + _rand_java_tail(len(name) - len(keep))
+            alias = keep + _rand_java_tail(len(name) - len(keep))
             if alias == name:
                 alias = alias[:-1] + ("Z" if alias[-1] != "Z" else "Y")
             out[name] = alias
@@ -1161,36 +1256,30 @@ def apply_polymorphic_shell(
     blob_aliases: dict[str, str] = {}
     replacements: list[tuple[bytes, bytes]] = []
     dex_data = bytearray(original_dex)
-    last_order_error: HardenError | None = None
-    poly_ok = False
-    for attempt in range(512):
-        class_aliases, method_aliases, field_aliases = generate_shell_symbol_aliases()
-        blob_aliases = generate_native_layer_name_aliases()
-        replacements = _build_replacements(
-            class_aliases,
-            method_aliases,
-            field_aliases,
-            blob_aliases,
-        )
-        patched = original_dex
-        for old, new in replacements:
-            patched = patched.replace(old, new)
-        dex_data = bytearray(patched)
-        try:
-            _assert_dex_string_ids_sorted(dex_data)
-        except HardenError as exc:
-            last_order_error = exc
-            continue
-        poly_ok = True
-        break
+    # Incremental application: generate all candidate aliases once, then try
+    # to commit each one. Any single alias whose substitution would break the
+    # DEX string_ids sort invariant is silently skipped — the others still
+    # apply. This converges deterministically (no retry loop) and yields
+    # partial polymorphism rather than all-or-nothing.
+    class_aliases, method_aliases, field_aliases = generate_shell_symbol_aliases()
+    blob_aliases = generate_native_layer_name_aliases()
 
-    if not poly_ok:
+    # Package replacements must apply atomically. If they alone break DEX
+    # ordering, skip polymorphism entirely (extremely rare).
+    pkg_replacements: list[tuple[bytes, bytes]] = [
+        (old_slash, new_slash),
+        (old_dot, new_dot),
+    ]
+    patched = original_dex
+    for old, new in pkg_replacements:
+        patched = patched.replace(old, new)
+    try:
+        _assert_dex_string_ids_sorted(patched)
+    except HardenError as exc:
         print(
-            "[!] polymorphic shell skipped: 512 attempts all produced invalid "
-            "DEX string_ids ordering"
+            "[!] polymorphic shell skipped: shell package rename broke DEX "
+            f"string_ids ordering ({exc})"
         )
-        if last_order_error is not None:
-            print(f"    last constraint: {last_order_error}")
         print("[!] continuing build without polymorphic shell (other protections unaffected)")
         return {
             "package_dot": SHELL_PKG_DOT,
@@ -1199,8 +1288,68 @@ def apply_polymorphic_shell(
             "field_aliases": {},
             "blob_aliases": {},
             "skipped": True,
-            "skip_reason": "dex_string_ids_ordering",
+            "skip_reason": "package_rename_broke_order",
         }
+
+    # Build (label, orig_key, (old_bytes, new_bytes)) candidates so we can
+    # rebuild the applied-only alias dicts after filtering.
+    candidates: list[tuple[str, str, tuple[bytes, bytes]]] = []
+    for src, tgt in class_aliases.items():
+        candidates.append(("class", src, (src.encode("utf-8"), tgt.encode("utf-8"))))
+    for src, tgt in method_aliases.items():
+        candidates.append(("method", src, (src.encode("utf-8"), tgt.encode("utf-8"))))
+    for src, tgt in field_aliases.items():
+        candidates.append(("field", src, (src.encode("utf-8"), tgt.encode("utf-8"))))
+    for src, tgt in blob_aliases.items():
+        candidates.append(("blob", src, (src.encode("utf-8"), tgt.encode("utf-8"))))
+    candidates.sort(key=lambda c: len(c[2][0]), reverse=True)
+
+    applied_class: dict[str, str] = {}
+    applied_method: dict[str, str] = {}
+    applied_field: dict[str, str] = {}
+    applied_blob: dict[str, str] = {}
+    skipped_count = 0
+    for label, orig_key, (old, new) in candidates:
+        if old == new:
+            continue
+        attempt = patched.replace(old, new)
+        if attempt == patched:
+            # Substring not present in DEX; nothing to do.
+            continue
+        try:
+            _assert_dex_string_ids_sorted(attempt)
+        except HardenError:
+            skipped_count += 1
+            continue
+        patched = attempt
+        if label == "class":
+            applied_class[orig_key] = class_aliases[orig_key]
+        elif label == "method":
+            applied_method[orig_key] = method_aliases[orig_key]
+        elif label == "field":
+            applied_field[orig_key] = field_aliases[orig_key]
+        elif label == "blob":
+            applied_blob[orig_key] = blob_aliases[orig_key]
+
+    class_aliases = applied_class
+    method_aliases = applied_method
+    field_aliases = applied_field
+    blob_aliases = applied_blob
+    # Rebuild replacements list with only the applied symbol aliases (used
+    # later to patch the .so files alongside the DEX).
+    replacements = _build_replacements(
+        class_aliases, method_aliases, field_aliases, blob_aliases,
+    )
+    dex_data = bytearray(patched)
+    total_applied = (
+        len(class_aliases) + len(method_aliases)
+        + len(field_aliases) + len(blob_aliases)
+    )
+    if skipped_count:
+        print(
+            f"[*] polymorphic shell: {skipped_count} alias(es) skipped due to "
+            f"DEX sort constraints; {total_applied} applied"
+        )
 
     # ── 1. Patch shell DEX ──
     dex_count = sum(original_dex.count(old) for old, _ in replacements)
@@ -3321,11 +3470,39 @@ def harden(args: argparse.Namespace) -> None:
                         shutil.rmtree(abi_dir)
                         print(f"[*] pruned non-target ABI: {abi_dir.name}")
 
+        # ── Translate shell VMP targets via R8 mapping.txt (if available) ──
+        # The shell-app release build R8-obfuscates internal method names
+        # (installPayload -> a, etc.), so the literal SHELL_VMP_TARGETS list
+        # would not match anything inside the shipped shell DEX. We read the
+        # mapping file that R8 emits next to the APK and translate.
+        shell_r8_targets = list(SHELL_VMP_TARGETS)
+        shell_r8_mapping_path: Path | None = None
+        if args.shell_apk:
+            shell_r8_mapping_path = infer_gradle_mapping_path(Path(args.shell_apk).resolve())
+        if shell_r8_mapping_path and shell_r8_mapping_path.exists():
+            try:
+                r8_map = parse_r8_mapping(shell_r8_mapping_path)
+                shell_r8_targets, r8_hits = translate_shell_vmp_targets_via_r8(
+                    SHELL_VMP_TARGETS, r8_map
+                )
+                if r8_hits:
+                    print(
+                        f"[*] shell VMP: applied R8 mapping translation "
+                        f"({r8_hits}/{len(SHELL_VMP_TARGETS)} targets rewritten)"
+                    )
+                else:
+                    print(
+                        "[!] shell VMP: R8 mapping parsed but no SHELL_VMP_TARGETS "
+                        "matched; using original names"
+                    )
+            except Exception as exc:
+                print(f"[!] shell VMP: failed to parse R8 mapping: {exc}")
+
         # ── Polymorphic shell generation (Phase 6.2) ──
         poly_pkg_dot: str = SHELL_PKG_DOT  # default: no rename
         proxy_app_class = PROXY_APP_CLASS
         init_provider_class = INIT_PROVIDER_CLASS
-        shell_vmp_targets = SHELL_VMP_TARGETS
+        shell_vmp_targets = shell_r8_targets
         shell_class_aliases: dict[str, str] = {}
         shell_method_aliases: dict[str, str] = {}
         shell_field_aliases: dict[str, str] = {}
@@ -3368,7 +3545,7 @@ def harden(args: argparse.Namespace) -> None:
                     shell_method_aliases.get(method, method),
                     sig,
                 )
-                for cls, method, sig in SHELL_VMP_TARGETS
+                for cls, method, sig in shell_r8_targets
             ]
             security_report["shell_polymorphism"] = {
                 "package": poly_pkg_dot,
