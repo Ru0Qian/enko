@@ -1832,13 +1832,19 @@ static int install_seccomp_filter(void) {
         return -1;
     }
 
-    /* Reject mismatched architecture (defensive — should never happen
-     * because Android picks the right ABI's lib). */
+    /* Allow-mode on mismatched architecture: this hits when running an
+     * arm64 .so on an x86_64 emulator via Android's native_bridge
+     * (Houdini). The kernel reports the *actual* CPU architecture in
+     * seccomp_data.arch (x86_64), but our syscall-number table is for
+     * the compiled architecture (arm64). On arch mismatch the syscall
+     * comparisons are meaningless, so we ALLOW everything instead of
+     * killing the process. Production ARM devices match natively and
+     * still get the full filter. */
     struct sock_filter filter[] = {
         BPF_STMT(BPF_LD + BPF_W + BPF_ABS,
                  (uint32_t)offsetof(struct seccomp_data, arch)),
         BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, ENKO_AUDIT_ARCH, 1, 0),
-        BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_KILL_PROCESS),
+        BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW),
 
         /* Load the syscall number. */
         BPF_STMT(BPF_LD + BPF_W + BPF_ABS,

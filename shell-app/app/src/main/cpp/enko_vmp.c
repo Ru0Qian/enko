@@ -2601,7 +2601,42 @@ static jobject vmp_run_interpreter_v5(JNIEnv *env, const vmp_method_t *method,
                 break;
             }
 
-            /* ── int binops (extending session 2's ADD/SUB) ─────── */
+            /* ── int binops (extending session 2's ADD/SUB) ─────────
+             * Per-build alias opcodes (BINOP_ALIAS1..10, BINOP_LIT_ALIAS1..8,
+             * UNOP_ALIAS1..5, IF_ALIAS1..6 etc) are folded onto their
+             * canonical operations exactly like v4 does — every alias
+             * case label shares the body of its canonical handler. The
+             * v4 alias-to-canonical groupings are reproduced here verbatim
+             * so v5 builds with the same per-build opcode shuffle produce
+             * identical observable behaviour. */
+            case VMP_BINOP_ALIAS1: case VMP_BINOP_ALIAS2: case VMP_BINOP_ALIAS3:
+            case VMP_BINOP_ALIAS4: case VMP_BINOP_ALIAS5: case VMP_BINOP_ALIAS6:
+            case VMP_BINOP_ALIAS7: case VMP_BINOP_ALIAS8: case VMP_BINOP_ALIAS9:
+            case VMP_BINOP_ALIAS10:
+            case VMP_BINOP_LIT_ALIAS1: case VMP_BINOP_LIT_ALIAS2: case VMP_BINOP_LIT_ALIAS3:
+            case VMP_BINOP_LIT_ALIAS4: case VMP_BINOP_LIT_ALIAS5: case VMP_BINOP_LIT_ALIAS6:
+            case VMP_BINOP_LIT_ALIAS7: case VMP_BINOP_LIT_ALIAS8:
+                /* All BINOP / BINOP_LIT aliases route to ADD_INT in v4. */
+                regs[dst].i = regs[src1].i + regs[src2].i;
+                break;
+
+            case VMP_UNOP_ALIAS1: case VMP_UNOP_ALIAS2: case VMP_UNOP_ALIAS3:
+                /* Aliased to SUB_INT in v4. */
+                regs[dst].i = regs[src1].i - regs[src2].i;
+                break;
+            case VMP_UNOP_ALIAS4: case VMP_UNOP_ALIAS5:
+                /* Aliased to AND_INT in v4. */
+                regs[dst].i = regs[src1].i & regs[src2].i;
+                break;
+            case VMP_IF_ALIAS1: case VMP_IF_ALIAS2:
+                /* Aliased to OR_INT in v4. */
+                regs[dst].i = regs[src1].i | regs[src2].i;
+                break;
+            case VMP_IF_ALIAS3: case VMP_IF_ALIAS4:
+                /* Aliased to XOR_INT in v4. */
+                regs[dst].i = regs[src1].i ^ regs[src2].i;
+                break;
+
             case VMP_MUL_INT: regs[dst].i = regs[src1].i * regs[src2].i; break;
             case VMP_DIV_INT:
                 if (regs[src2].i == 0) {
