@@ -28,6 +28,10 @@
 #include <link.h>
 #include <elf.h>
 #include <sys/utsname.h>
+#include <sys/prctl.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+#include <linux/audit.h>
 
 #include <android/log.h>
 
@@ -1766,6 +1770,139 @@ static void start_detached_thread(void *(*func)(void *)) {
     pthread_attr_destroy(&attr);
 }
 
+/* ======================================================================
+ * Seccomp-bpf attack-syscall filter
+ *
+ * Kernel-level mitigation that denies the syscalls used by external
+ * debuggers, memory dumpers, and process-introspection tools, regardless
+ * of whether the attacker has libc hooks or LD_PRELOAD'd a helper. The
+ * filter is ADDITIVE on top of Android's zygote seccomp policy — kernel
+ * AND's both filters, so we can only deny more, never re-allow.
+ *
+ * Denied (EPERM):
+ *   - ptrace                : every ptrace operation (attach, peek, poke, ...)
+ *   - process_vm_readv      : non-ptrace cross-process memory read
+ *   - process_vm_writev     : non-ptrace cross-process memory write
+ *   - kcmp                  : kernel-level process comparison (anti-detect)
+ *
+ * Once installed, the filter and PR_SET_NO_NEW_PRIVS bit cannot be
+ * removed for the lifetime of the process. We install AFTER our own
+ * PTRACE_TRACEME succeeds so we don't deny it on ourselves.
+ *
+ * Syscall numbers are per-architecture; ARM64 / ARM32 / x86_64 / x86 are
+ * each handled separately because Android ships APKs for all four ABIs.
+ * On platforms where the headers don't define a syscall number, we just
+ * skip that rule.
+ * ====================================================================== */
+
+#if defined(__aarch64__)
+#  define ENKO_AUDIT_ARCH AUDIT_ARCH_AARCH64
+#  define ENKO_NR_PTRACE             117
+#  define ENKO_NR_PROCESS_VM_READV   270
+#  define ENKO_NR_PROCESS_VM_WRITEV  271
+#  define ENKO_NR_KCMP               272
+#elif defined(__arm__)
+#  define ENKO_AUDIT_ARCH AUDIT_ARCH_ARM
+#  define ENKO_NR_PTRACE              26
+#  define ENKO_NR_PROCESS_VM_READV   376
+#  define ENKO_NR_PROCESS_VM_WRITEV  377
+#  define ENKO_NR_KCMP               378
+#elif defined(__x86_64__)
+#  define ENKO_AUDIT_ARCH AUDIT_ARCH_X86_64
+#  define ENKO_NR_PTRACE             101
+#  define ENKO_NR_PROCESS_VM_READV   310
+#  define ENKO_NR_PROCESS_VM_WRITEV  311
+#  define ENKO_NR_KCMP               312
+#elif defined(__i386__)
+#  define ENKO_AUDIT_ARCH AUDIT_ARCH_I386
+#  define ENKO_NR_PTRACE              26
+#  define ENKO_NR_PROCESS_VM_READV   347
+#  define ENKO_NR_PROCESS_VM_WRITEV  348
+#  define ENKO_NR_KCMP               349
+#else
+#  define ENKO_AUDIT_ARCH 0
+#endif
+
+static int install_seccomp_filter(void) {
+#if ENKO_AUDIT_ARCH == 0
+    return -1;
+#else
+    /* Required before installing a filter without CAP_SYS_ADMIN. */
+    if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
+        return -1;
+    }
+
+    /* Reject mismatched architecture (defensive — should never happen
+     * because Android picks the right ABI's lib). */
+    struct sock_filter filter[] = {
+        BPF_STMT(BPF_LD + BPF_W + BPF_ABS,
+                 (uint32_t)offsetof(struct seccomp_data, arch)),
+        BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, ENKO_AUDIT_ARCH, 1, 0),
+        BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_KILL_PROCESS),
+
+        /* Load the syscall number. */
+        BPF_STMT(BPF_LD + BPF_W + BPF_ABS,
+                 (uint32_t)offsetof(struct seccomp_data, nr)),
+
+        /* Deny specific attack syscalls with EPERM. */
+        BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, ENKO_NR_PTRACE, 0, 1),
+        BPF_STMT(BPF_RET + BPF_K,
+                 SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA)),
+
+        BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, ENKO_NR_PROCESS_VM_READV, 0, 1),
+        BPF_STMT(BPF_RET + BPF_K,
+                 SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA)),
+
+        BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, ENKO_NR_PROCESS_VM_WRITEV, 0, 1),
+        BPF_STMT(BPF_RET + BPF_K,
+                 SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA)),
+
+        BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, ENKO_NR_KCMP, 0, 1),
+        BPF_STMT(BPF_RET + BPF_K,
+                 SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA)),
+
+        /* Everything else is allowed — kernel still ANDs with Android's
+         * zygote filter, so any syscall Android itself denies stays denied. */
+        BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW),
+    };
+
+    struct sock_fprog prog = {
+        .len = (unsigned short)(sizeof(filter) / sizeof(filter[0])),
+        .filter = filter,
+    };
+
+    /* Use the seccomp(2) syscall directly to pass SECCOMP_FILTER_FLAG_TSYNC,
+     * which propagates the filter to all existing threads. prctl(2) can't
+     * pass flags. SYS_seccomp landed in Linux 3.17 / Android API 21+. */
+#ifndef SYS_seccomp
+#  if defined(__aarch64__)
+#    define SYS_seccomp 277
+#  elif defined(__arm__)
+#    define SYS_seccomp 383
+#  elif defined(__x86_64__)
+#    define SYS_seccomp 317
+#  elif defined(__i386__)
+#    define SYS_seccomp 354
+#  endif
+#endif
+    long rc = syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER,
+                      SECCOMP_FILTER_FLAG_TSYNC, &prog);
+    if (rc != 0) {
+        /* Fall back to prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog)
+         * for kernels that don't support the seccomp() syscall or for
+         * ROMs that ship without SECCOMP_FILTER_FLAG_TSYNC. The fallback
+         * applies the filter only to the calling thread, but since
+         * enko_anti_debug_start() runs before any of our own threads spawn,
+         * the kernel propagates the filter to children via fork/clone
+         * automatically — covering watchdog and inotify threads. */
+        if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) != 0) {
+            return -1;
+        }
+    }
+    return 0;
+#endif
+}
+
 /* ---- Public API ---- */
 __attribute__((annotate("fla")))
 void enko_anti_debug_start(void) {
@@ -1789,6 +1926,18 @@ void enko_anti_debug_start(void) {
         LOGW("suspicious env inject at JNI_OnLoad");
         _exit(1);
     }
+
+    /* Install the kernel-level syscall filter AFTER our own PTRACE_TRACEME
+     * but BEFORE we spawn any threads. The filter is inherited by all
+     * threads that fork/clone from this point onward, so the watchdog and
+     * inotify threads spawned below run under the same denial policy.
+     * Failure to install is non-fatal — Android's zygote-level seccomp
+     * filter is still in effect, and the user-space watchdog still
+     * detects attached debuggers. */
+    if (install_seccomp_filter() != 0) {
+        LOGW("seccomp filter install failed (continuing with userspace defenses only)");
+    }
+
     g_watchdog_running = 1;
     start_detached_thread(watchdog_thread);
     start_detached_thread(inotify_watcher_thread);
