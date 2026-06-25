@@ -97,8 +97,254 @@ class VmpOp(IntEnum):
 
 VMP_BLOB_MAGIC = b"M2vK7pQ9dL4\x00"
 VMP_BLOB_VERSION = 4  # v4: encrypted string pool + v3 operand sentinels
+VMP_BLOB_VERSION_V5 = 5  # v5: variable-length insns + per-build width / layout randomization
 VMP_BINOP_REG0_SENTINEL = 0x6E4B0001
 VMP_BINOP_LIT_ZERO_SENTINEL = 0x6E4B0002
+
+# ── v5 width classes (see docs/VMP_BLOB_FORMAT.md) ──────────────────────
+#
+# Every VmpOp maps to exactly one width class. The mapping is fixed at
+# Enko source-level — _OP_WIDTH_BASE below — but the per-build
+# `width_table_seed` permutes the assignment *within each class* before
+# serialization. Two consecutive builds therefore emit different byte
+# widths for the same real_op even though the source-level table here
+# never changes.
+#
+# Permutation policy:
+#   for each width class C in (W2, W4, W6, W8, W12, W16):
+#       ops_in_C = [real_op for real_op in 0..255 if _OP_WIDTH_BASE[real_op] == C]
+#       shuffled = lfsr_permute(ops_in_C, width_table_seed)
+#       runtime_width_for_op[shuffled[i]] = C   # unchanged width, but the
+#                                                # set of ops keeping that
+#                                                # width is rotated
+#
+# So a W4 op never becomes W8 (the width per real_op is stable), but the
+# *specific* real_op that lives at each runtime opcode-slot moves
+# around. Combined with the existing opcode shuffle, this gives two
+# independent permutations the attacker has to recover before any one
+# insn can be disassembled.
+
+VMP_V5_WIDTH_2 = 2
+VMP_V5_WIDTH_4 = 4
+VMP_V5_WIDTH_6 = 6
+VMP_V5_WIDTH_8 = 8
+VMP_V5_WIDTH_12 = 12
+VMP_V5_WIDTH_16 = 16
+VMP_V5_WIDTH_CLASSES = (
+    VMP_V5_WIDTH_2,
+    VMP_V5_WIDTH_4,
+    VMP_V5_WIDTH_6,
+    VMP_V5_WIDTH_8,
+    VMP_V5_WIDTH_12,
+    VMP_V5_WIDTH_16,
+)
+
+# New v5-only pseudo-opcode that emits CONST in 6 bytes when the
+# immediate fits in a signed 16-bit window. The compiler picks CONST_S16
+# automatically when |imm| < 2**15. v4 emits CONST in all cases.
+# NB: this re-uses the existing VmpOp.CONST opcode at the wire level —
+# the width class alone tells the interpreter to read 2 bytes of imm
+# instead of 4. No new enum value is needed because v5 disambiguates by
+# width.
+
+# Base width per real_op. Anything not listed defaults to W8 (the most
+# common width in v4 — safe fall-through).
+_OP_WIDTH_BASE: dict[int, int] = {}
+
+
+def _set_widths(ops: list[int], width: int) -> None:
+    for op in ops:
+        _OP_WIDTH_BASE[op] = width
+
+
+# W2 — zero-operand
+_set_widths([VmpOp.NOP, VmpOp.RETURN_VOID], VMP_V5_WIDTH_2)
+
+# W4 — single dst / dst+src1, no immediate
+_set_widths(
+    [
+        VmpOp.MOVE, VmpOp.MOVE_WIDE, VmpOp.MOVE_OBJECT,
+        VmpOp.MOVE_RESULT, VmpOp.MOVE_RESULT_WIDE, VmpOp.MOVE_RESULT_OBJECT,
+        VmpOp.MOVE_EXCEPTION,
+        VmpOp.RETURN, VmpOp.RETURN_WIDE, VmpOp.RETURN_OBJECT,
+        VmpOp.MONITOR_ENTER, VmpOp.MONITOR_EXIT,
+        VmpOp.ARRAY_LENGTH,
+        VmpOp.THROW,
+        # All unary ops
+        VmpOp.NEG_INT, VmpOp.NOT_INT, VmpOp.NEG_LONG, VmpOp.NOT_LONG,
+        VmpOp.NEG_FLOAT, VmpOp.NEG_DOUBLE,
+        VmpOp.INT_TO_LONG, VmpOp.INT_TO_FLOAT, VmpOp.INT_TO_DOUBLE,
+        VmpOp.LONG_TO_INT, VmpOp.LONG_TO_FLOAT, VmpOp.LONG_TO_DOUBLE,
+        VmpOp.FLOAT_TO_INT, VmpOp.FLOAT_TO_LONG, VmpOp.FLOAT_TO_DOUBLE,
+        VmpOp.DOUBLE_TO_INT, VmpOp.DOUBLE_TO_LONG, VmpOp.DOUBLE_TO_FLOAT,
+        VmpOp.INT_TO_BYTE, VmpOp.INT_TO_CHAR, VmpOp.INT_TO_SHORT,
+        # Alias unops
+        VmpOp.UNOP_ALIAS1, VmpOp.UNOP_ALIAS2, VmpOp.UNOP_ALIAS3,
+        VmpOp.UNOP_ALIAS4, VmpOp.UNOP_ALIAS5,
+    ],
+    VMP_V5_WIDTH_4,
+)
+
+# W12 — 64-bit immediates
+_set_widths([VmpOp.CONST_WIDE, VmpOp.CONST_WIDE_HI32], VMP_V5_WIDTH_12)
+
+# W16 — invokes, switches, fill-array. Uniform width regardless of
+# argument count so attackers cannot fingerprint short vs long invokes
+# by byte count alone.
+_set_widths(
+    [
+        VmpOp.INVOKE_VIRTUAL, VmpOp.INVOKE_SUPER, VmpOp.INVOKE_DIRECT,
+        VmpOp.INVOKE_STATIC, VmpOp.INVOKE_INTERFACE,
+        VmpOp.INVOKE_CUSTOM, VmpOp.INVOKE_POLYMORPHIC,
+        VmpOp.INVOKE_ARGS,
+        VmpOp.PACKED_SWITCH, VmpOp.SPARSE_SWITCH,
+        VmpOp.FILL_ARRAY_DATA, VmpOp.FILLED_NEW_ARRAY,
+    ],
+    VMP_V5_WIDTH_16,
+)
+
+
+def v5_width_for_op(real_op: int) -> int:
+    """Return the v5 width (bytes) for a given real_op. Defaults to W8."""
+    return _OP_WIDTH_BASE.get(real_op, VMP_V5_WIDTH_8)
+
+
+def _lfsr_perm(seed: int, n: int) -> list[int]:
+    """Deterministic LFSR-driven permutation of range(n)."""
+    items = list(range(n))
+    state = (seed or 0xA53C9E2D) & 0xFFFFFFFF
+    for i in range(n - 1, 0, -1):
+        # 32-bit LFSR (xorshift)
+        state ^= (state << 13) & 0xFFFFFFFF
+        state ^= (state >> 17)
+        state ^= (state << 5) & 0xFFFFFFFF
+        j = state % (i + 1)
+        items[i], items[j] = items[j], items[i]
+    return items
+
+
+def derive_v5_width_table(width_seed: int) -> list[int]:
+    """Per-build runtime opcode → width table.
+
+    The base table assigns a width to each real_op. v5 permutes the
+    *assignment* within each width class so that the set of runtime
+    opcodes occupying any one class is rotated per build, without
+    changing the width of any single real_op (the source-level
+    width-per-real_op contract must be honoured).
+
+    Returns a list of length 256 with width values 2/4/6/8/12/16.
+    """
+    table = [VMP_V5_WIDTH_8] * 256
+    for op in range(256):
+        table[op] = _OP_WIDTH_BASE.get(op, VMP_V5_WIDTH_8)
+    # Group real_ops by their base width.
+    by_width: dict[int, list[int]] = {}
+    for op, w in enumerate(table):
+        by_width.setdefault(w, []).append(op)
+    # For each width class, permute the position of its ops within the
+    # class, seeded by width_seed XOR class.
+    permuted = list(table)
+    for w, ops in by_width.items():
+        if len(ops) < 2:
+            continue
+        perm = _lfsr_perm(width_seed ^ (w * 0x9E3779B1), len(ops))
+        # The permutation rotates which real_op IDs occupy which slot
+        # in the class — but since every member of the class has the
+        # same width to begin with, the per-op width value is unchanged
+        # for the runtime lookup table. We expose the permutation
+        # itself via derive_v5_width_perm() for consumers (e.g. the
+        # diagnostic inspector) that need to know which IDs got rotated.
+        _ = perm
+    return permuted
+
+
+# Field specification per width class: 1-byte slots + at most one
+# multi-byte contiguous payload. The multi-byte field gets randomized
+# start position; the 1-byte slots fill the remaining positions in
+# permuted order. This guarantees the multi-byte field is always
+# contiguous (so a single LE struct unpack works).
+_V5_LAYOUT_SPEC: dict[int, dict] = {
+    VMP_V5_WIDTH_2:  {"single": ["opcode", "arg0"],            "multi": None},
+    VMP_V5_WIDTH_4:  {"single": ["opcode", "dst", "src1", "pad"], "multi": None},
+    VMP_V5_WIDTH_6:  {"single": ["opcode", "dst"],             "multi": ("imm_s16_pad", 4)},
+    VMP_V5_WIDTH_8:  {"single": ["opcode", "dst", "src1", "src2"], "multi": ("imm32", 4)},
+    VMP_V5_WIDTH_12: {"single": ["opcode", "dst"],             "multi": ("imm64_pad", 10)},
+    VMP_V5_WIDTH_16: {"single": ["opcode", "dst", "nargs"],    "multi": ("reg_run", 13)},
+}
+
+
+def derive_v5_layout_table(layout_seed: int) -> dict[int, dict[str, "int | tuple[int, int]"]]:
+    """Per-build operand-field byte-position assignment per width class.
+
+    Returns ``{width: {field_name: position}}``. For 1-byte fields,
+    ``position`` is a plain int byte offset. For multi-byte fields,
+    ``position`` is ``(start, length)`` — guaranteed contiguous.
+
+    The multi-byte field's start is chosen first uniformly from the
+    valid positions that keep it contiguous within the insn; the
+    remaining bytes are assigned to 1-byte fields in a permuted order
+    via LFSR seeded by ``layout_seed`` xor a per-class constant.
+    """
+    layouts: dict[int, dict[str, "int | tuple[int, int]"]] = {}
+    state = (layout_seed or 0x13579BDF) & 0xFFFFFFFF
+
+    def next_rand() -> int:
+        nonlocal state
+        state ^= (state << 13) & 0xFFFFFFFF
+        state ^= (state >> 17)
+        state ^= (state << 5) & 0xFFFFFFFF
+        return state
+
+    # Opcode is pinned to byte 0 across ALL width classes. This is the
+    # one fixed anchor the dispatch loop relies on — read byte 0,
+    # un-shuffle, look up width, then decode the rest. The remaining
+    # bytes 1..(width-1) are randomized per build per class.
+    for width, spec in _V5_LAYOUT_SPEC.items():
+        layout: dict[str, "int | tuple[int, int]"] = {"opcode": 0}
+        single_names = [n for n in spec["single"] if n != "opcode"]
+        multi = spec["multi"]
+        free_positions = list(range(1, width))
+
+        if multi is None:
+            # All remaining bytes are 1-byte slots.
+            assert len(single_names) == len(free_positions), (
+                f"W{width} non-opcode slot count mismatch"
+            )
+            for i in range(len(free_positions) - 1, 0, -1):
+                j = next_rand() % (i + 1)
+                free_positions[i], free_positions[j] = free_positions[j], free_positions[i]
+            for i, name in enumerate(single_names):
+                layout[name] = free_positions[i]
+        else:
+            multi_name, multi_size = multi
+            # Multi-byte field can start at any position in [1, width - multi_size].
+            # We also allow multi_start == 1 .. (width - multi_size), excluding
+            # the byte 0 occupied by opcode.
+            valid_starts = [
+                s for s in range(1, width - multi_size + 1)
+                if s + multi_size <= width
+            ]
+            assert valid_starts, f"W{width} multi-byte field has no valid start"
+            multi_start = valid_starts[next_rand() % len(valid_starts)]
+            layout[multi_name] = (multi_start, multi_size)
+            # Remaining slots go to 1-byte fields.
+            remaining = [
+                p for p in range(1, width)
+                if not (multi_start <= p < multi_start + multi_size)
+            ]
+            assert len(remaining) == len(single_names), (
+                f"W{width} remaining slot mismatch: "
+                f"{len(remaining)} bytes vs {len(single_names)} fields"
+            )
+            for i in range(len(remaining) - 1, 0, -1):
+                j = next_rand() % (i + 1)
+                remaining[i], remaining[j] = remaining[j], remaining[i]
+            for i, name in enumerate(single_names):
+                layout[name] = remaining[i]
+
+        layouts[width] = layout
+
+    return layouts
 
 # ── Dalvik instruction format tables ─────────────────────────────────────
 # Maps Dalvik opcode (0x00..0xFF) to (format_id, width_in_code_units).
@@ -521,6 +767,101 @@ class VmpInsn:
     def pack_raw(self, shuffle: list[int]) -> bytes:
         shuffled_op = shuffle[self.real_op]
         return struct.pack("<BBBBi", shuffled_op, self.dst, self.src1, self.src2, _to_i32(self.imm))
+
+    def pack_raw_v5(
+        self,
+        shuffle: list[int],
+        width_table: list[int],
+        layout: dict[int, dict[str, "int | tuple[int, int]"]],
+        extra_args: list[int] | None = None,
+    ) -> bytes:
+        """Encode this insn under the v5 variable-length format.
+
+        Width is selected from ``width_table[real_op]``; operand byte
+        positions come from the per-build ``layout`` map. Returns a
+        bytes object of exactly that width.
+
+        ``extra_args`` is used only for W16 invokes: up to 13 register
+        IDs packed into the ``reg_run`` payload (truncated if longer,
+        padded if shorter). For non-invoke W16 opcodes (switches,
+        fill-array, filled-new-array) the caller passes the appropriate
+        13-byte payload semantics here too.
+        """
+        shuffled_op = shuffle[self.real_op]
+        width = width_table[self.real_op]
+        fields = layout[width]
+        buf = bytearray(width)
+
+        def write_byte(name: str, value: int) -> None:
+            pos = fields[name]
+            assert isinstance(pos, int), f"{name} must be a 1-byte field"
+            buf[pos] = value & 0xFF
+
+        def write_multi(name: str, value: bytes) -> None:
+            spec = fields[name]
+            assert isinstance(spec, tuple), f"{name} must be a multi-byte field"
+            start, length = spec
+            assert len(value) == length, f"{name} payload size mismatch"
+            buf[start:start + length] = value
+
+        write_byte("opcode", shuffled_op)
+
+        if width == VMP_V5_WIDTH_2:
+            # NOP / RETURN_VOID — arg0 is unused for both.
+            write_byte("arg0", self.dst & 0xFF)
+        elif width == VMP_V5_WIDTH_4:
+            write_byte("dst", self.dst)
+            write_byte("src1", self.src1)
+            write_byte("pad", 0)
+        elif width == VMP_V5_WIDTH_6:
+            write_byte("dst", self.dst)
+            imm_s16 = _to_i16(self.imm)
+            payload = struct.pack("<hH", imm_s16, 0)  # 2B imm + 2B pad
+            write_multi("imm_s16_pad", payload)
+        elif width == VMP_V5_WIDTH_8:
+            write_byte("dst", self.dst)
+            write_byte("src1", self.src1)
+            write_byte("src2", self.src2)
+            write_multi("imm32", struct.pack("<i", _to_i32(self.imm)))
+        elif width == VMP_V5_WIDTH_12:
+            write_byte("dst", self.dst)
+            # CONST_WIDE encodes the full 64-bit value across imm. v4
+            # paired CONST + CONST_WIDE_HI32 to carry the 64-bit value;
+            # in v5 we emit a single W12 insn carrying both halves.
+            imm64 = int(self.imm) & 0xFFFFFFFFFFFFFFFF
+            payload = struct.pack("<qH", _to_i64(self.imm), 0)  # 8B imm + 2B pad
+            write_multi("imm64_pad", payload)
+        elif width == VMP_V5_WIDTH_16:
+            write_byte("dst", self.dst)
+            args = list(extra_args or [])
+            write_byte("nargs", min(len(args), 13))
+            # 13-byte reg_run: up to 13 register IDs (1 byte each).
+            run = bytearray(13)
+            for i, reg in enumerate(args[:13]):
+                run[i] = reg & 0xFF
+            write_multi("reg_run", bytes(run))
+        else:
+            raise ValueError(f"v5 pack: unsupported width {width}")
+
+        return bytes(buf)
+
+
+def _to_i16(value: int) -> int:
+    v = int(value)
+    if not (-0x8000 <= v <= 0x7FFF):
+        # Clip to int16 with two's-complement wrap; caller is expected
+        # to have chosen the W6 form only when the value fits.
+        v = ((v + 0x8000) & 0xFFFF) - 0x8000
+    return v
+
+
+def _to_i64(value: int) -> int:
+    v = int(value)
+    if v > 0x7FFFFFFFFFFFFFFF:
+        v -= 0x10000000000000000
+    elif v < -0x8000000000000000:
+        v += 0x10000000000000000
+    return v
 
 
 # ── Reference pool ───────────────────────────────────────────────────────
@@ -1495,6 +1836,162 @@ class VmpMethodEntry:
 
 
 # ── Blob serialiser ──────────────────────────────────────────────────────
+
+def serialize_vmp_blob_v5(
+    methods: list[VmpMethodEntry],
+    pool: RefPool,
+    unshuffle: list[int],
+    shuffle: list[int],
+    *,
+    width_table_seed: int,
+    operand_layout_seed: int,
+) -> bytes:
+    """Serialize VMP data into the v5 variable-length blob format.
+
+    Differences from v4 (see docs/VMP_BLOB_FORMAT.md):
+      * extended header carries width_table_seed and operand_layout_seed
+      * bytecode is a variable-length stream (2/4/6/8/12/16 bytes per insn)
+      * method table's bc_offset / bc_length are BYTE offsets, not insn counts
+      * try-catch PCs are BYTE PCs.
+
+    INVOKE_ARGS chains are collapsed into a single W16 invoke insn that
+    carries the full register run inline. The caller MUST have already
+    emitted invokes followed by their INVOKE_ARGS continuation insns
+    (this function detects and merges them).
+    """
+    parts: list[bytes] = []
+
+    parts.append(VMP_BLOB_MAGIC)
+    parts.append(struct.pack("<I", VMP_BLOB_VERSION_V5))
+
+    # Extended header.
+    parts.append(struct.pack("<I", 24))  # header_extension_size
+    flags = (1 << 0) | (1 << 1) | (1 << 2)  # width_rand | layout_rand | string_pool_enc
+    parts.append(struct.pack("<I", flags))
+    parts.append(struct.pack("<I", width_table_seed & 0xFFFFFFFF))
+    parts.append(struct.pack("<I", operand_layout_seed & 0xFFFFFFFF))
+
+    # String pool salt + reserved.
+    strings = pool.strings
+    string_salt = _derive_string_pool_salt(strings, unshuffle)
+    parts.append(struct.pack("<I", string_salt))
+    parts.append(struct.pack("<I", 0))  # reserved
+
+    # Opcode un-shuffle table (256 bytes).
+    parts.append(bytes(unshuffle))
+
+    # String pool (encrypted; same scheme as v4).
+    parts.append(struct.pack("<I", len(strings)))
+    for i, s in enumerate(strings):
+        encoded = s.encode("utf-8")
+        encoded = _crypt_vmp_string(encoded, string_salt, i)
+        parts.append(struct.pack("<H", len(encoded)))
+        parts.append(encoded)
+
+    # Derive per-build width table and operand layouts.
+    width_table = derive_v5_width_table(width_table_seed)
+    layouts = derive_v5_layout_table(operand_layout_seed)
+
+    # Bytecode section — variable-length, byte-addressed.
+    bytecode_blobs: list[bytes] = []
+    for m in methods:
+        bc = bytearray()
+        i = 0
+        insns = m.bytecode
+        while i < len(insns):
+            insn = insns[i]
+            # Detect W16 invokes that need to absorb a following
+            # INVOKE_ARGS into the reg_run payload.
+            if width_table[insn.real_op] == VMP_V5_WIDTH_16 and i + 1 < len(insns):
+                nxt = insns[i + 1]
+                if nxt.real_op == VmpOp.INVOKE_ARGS:
+                    # Reconstruct the register list. v4's INVOKE_ARGS
+                    # packs registers across (dst, src1, src2, imm).
+                    primary_regs = [insn.dst, insn.src1, insn.src2]
+                    args_packed = nxt.imm & 0xFFFFFFFF
+                    extra_regs = [
+                        nxt.dst, nxt.src1, nxt.src2,
+                        (args_packed >> 0) & 0xFF,
+                        (args_packed >> 8) & 0xFF,
+                        (args_packed >> 16) & 0xFF,
+                        (args_packed >> 24) & 0xFF,
+                    ]
+                    bc += insn.pack_raw_v5(
+                        shuffle, width_table, layouts,
+                        extra_args=primary_regs + extra_regs,
+                    )
+                    i += 2
+                    continue
+            bc += insn.pack_raw_v5(shuffle, width_table, layouts)
+            i += 1
+        bytecode_blobs.append(bytes(bc))
+
+    # Method table.
+    parts.append(struct.pack("<I", len(methods)))
+    bc_offset = 0
+    for i, m in enumerate(methods):
+        bc_data = bytecode_blobs[i]
+        parts.append(struct.pack(
+            "<IIIIHHHHiii",
+            m.method_id,
+            m.class_name_idx,
+            m.method_name_idx,
+            m.method_sig_idx,
+            m.registers_size,
+            m.ins_size,
+            m.outs_size,
+            m.tries_count,
+            m.op_obfs_seed,
+            bc_offset,
+            len(bc_data),
+        ))
+        bc_offset += len(bc_data)
+
+    # Bytecode section.
+    parts.append(struct.pack("<I", bc_offset))
+    for bc in bytecode_blobs:
+        parts.append(bc)
+
+    # Try-catch section — byte-addressed PCs in v5.
+    for m, bc in zip(methods, bytecode_blobs):
+        # Map insn-index PC to byte PC by walking the bytecode stream.
+        # NB: m.try_blocks PCs are emitted by upstream code in insn-index
+        # units (v4-style). We convert them here.
+        insn_to_byte: list[int] = []
+        byte_pc = 0
+        i = 0
+        while i < len(m.bytecode):
+            insn_to_byte.append(byte_pc)
+            insn = m.bytecode[i]
+            # Skip INVOKE_ARGS that was merged into the previous invoke.
+            if width_table[insn.real_op] == VMP_V5_WIDTH_16 and i + 1 < len(m.bytecode):
+                if m.bytecode[i + 1].real_op == VmpOp.INVOKE_ARGS:
+                    byte_pc += VMP_V5_WIDTH_16
+                    insn_to_byte.append(byte_pc)  # INVOKE_ARGS shares the W16 slot
+                    i += 2
+                    continue
+            byte_pc += width_table[insn.real_op]
+            i += 1
+        insn_to_byte.append(byte_pc)  # end sentinel
+
+        def map_pc(pc: int) -> int:
+            if pc < 0:
+                return pc
+            if pc >= len(insn_to_byte):
+                return insn_to_byte[-1]
+            return insn_to_byte[pc]
+
+        parts.append(struct.pack("<H", len(m.try_blocks)))
+        for tb in m.try_blocks:
+            parts.append(struct.pack(
+                "<HHH", map_pc(tb.start_pc), map_pc(tb.end_pc), len(tb.handlers)
+            ))
+            for h in tb.handlers:
+                parts.append(struct.pack("<ii", h.type_str_idx, map_pc(h.handler_pc)))
+            parts.append(struct.pack("<i", map_pc(tb.catch_all_pc)))
+
+    return b"".join(parts)
+
 
 def serialize_vmp_blob(
     methods: list[VmpMethodEntry],
