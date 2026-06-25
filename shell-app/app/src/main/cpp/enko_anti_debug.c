@@ -25,6 +25,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <link.h>
+#include <elf.h>
 
 #include <android/log.h>
 
@@ -1192,6 +1194,181 @@ static int check_mapped_lib_guard_integrity(void) {
     return 0;
 }
 
+/* ======================================================================
+ * PLT/GOT hook integrity (Phase 2.4)
+ *
+ * Frida (and many hook libraries) hook by overwriting GOT slots — the
+ * indirection table the PLT uses to resolve external function calls.
+ * This leaves the function prologue untouched, so check_inline_hooks() and
+ * the mapped-library code-guards cannot see it. The defense:
+ *
+ *  1. At JNI_OnLoad, walk libagpcore.so's PT_DYNAMIC, locate DT_JMPREL
+ *     (the PLT relocation table) and DT_PLTRELSZ (its size).
+ *  2. For each relocation entry, record (got_slot_address, current value).
+ *     The value is the resolved function pointer.
+ *  3. On every risk check, walk the recorded slots and verify each value
+ *     matches the baseline. Any drift means a GOT hook.
+ *
+ * This catches Frida's `Interceptor.replace` on libagpcore imports, and
+ * any LD_PRELOAD-style symbol replacement done after the dynamic linker
+ * finished its bind-now pass.
+ * ====================================================================== */
+
+#define GOT_GUARD_MAX_SLOTS 256
+
+typedef struct {
+    uintptr_t addr;       /* address of the GOT slot */
+    uintptr_t baseline;   /* expected value */
+} got_slot_t;
+
+typedef struct {
+    got_slot_t slots[GOT_GUARD_MAX_SLOTS];
+    size_t slot_count;
+    uintptr_t got_region_start;
+    uintptr_t got_region_end;
+    int relro_was_readonly; /* observed RELRO state at init time */
+    int ready;
+} got_guard_t;
+
+static got_guard_t g_got_guard;
+
+typedef struct {
+    const char *target_substr;
+    got_guard_t *guard;
+    int matched;
+} got_find_ctx_t;
+
+static int got_find_cb(struct dl_phdr_info *info, size_t size, void *data) {
+    (void)size;
+    got_find_ctx_t *ctx = (got_find_ctx_t *)data;
+    if (ctx->matched) return 1;
+    if (!info->dlpi_name || !info->dlpi_name[0]) return 0;
+    if (!strstr(info->dlpi_name, ctx->target_substr)) return 0;
+
+    ElfW(Dyn) *dyn_ptr = NULL;
+    for (int i = 0; i < info->dlpi_phnum; i++) {
+        if (info->dlpi_phdr[i].p_type == PT_DYNAMIC) {
+            dyn_ptr = (ElfW(Dyn) *)(info->dlpi_addr + info->dlpi_phdr[i].p_vaddr);
+            break;
+        }
+    }
+    if (!dyn_ptr) return 0;
+
+    ElfW(Addr) jmprel = 0;
+    uintptr_t jmprel_sz = 0;
+    for (ElfW(Dyn) *dyn = dyn_ptr; dyn->d_tag != DT_NULL; dyn++) {
+        if (dyn->d_tag == DT_JMPREL) {
+            jmprel = dyn->d_un.d_ptr;
+        } else if (dyn->d_tag == DT_PLTRELSZ) {
+            jmprel_sz = (uintptr_t)dyn->d_un.d_val;
+        }
+    }
+    if (!jmprel || !jmprel_sz) return 1; /* found target but no PLT */
+
+    /* On some Android versions DT_JMPREL is stored relative to the load
+     * base, on others it's already an absolute address. Normalize. */
+    if (jmprel < info->dlpi_addr) {
+        jmprel += info->dlpi_addr;
+    }
+
+#if defined(__aarch64__) || defined(__x86_64__)
+    ElfW(Rela) *rela = (ElfW(Rela) *)(uintptr_t)jmprel;
+    size_t rel_count = jmprel_sz / sizeof(ElfW(Rela));
+#else
+    ElfW(Rel) *rel = (ElfW(Rel) *)(uintptr_t)jmprel;
+    size_t rel_count = jmprel_sz / sizeof(ElfW(Rel));
+#endif
+
+    if (rel_count > GOT_GUARD_MAX_SLOTS) {
+        rel_count = GOT_GUARD_MAX_SLOTS;
+    }
+
+    got_guard_t *g = ctx->guard;
+    uintptr_t got_min = UINTPTR_MAX;
+    uintptr_t got_max = 0;
+    size_t recorded = 0;
+    for (size_t k = 0; k < rel_count; k++) {
+#if defined(__aarch64__) || defined(__x86_64__)
+        uintptr_t slot_addr = (uintptr_t)(info->dlpi_addr + rela[k].r_offset);
+#else
+        uintptr_t slot_addr = (uintptr_t)(info->dlpi_addr + rel[k].r_offset);
+#endif
+        /* Sanity: skip entries whose slot falls outside the loaded segment */
+        if (slot_addr < info->dlpi_addr) continue;
+        g->slots[recorded].addr = slot_addr;
+        g->slots[recorded].baseline = *(volatile uintptr_t *)slot_addr;
+        if (slot_addr < got_min) got_min = slot_addr;
+        if (slot_addr > got_max) got_max = slot_addr;
+        recorded++;
+    }
+    g->slot_count = recorded;
+    g->got_region_start = (got_min == UINTPTR_MAX) ? 0 : got_min;
+    g->got_region_end = got_max;
+    g->ready = recorded > 0 ? 1 : 0;
+    ctx->matched = 1;
+    return 1;
+}
+
+static int probe_got_region_is_readonly(uintptr_t addr) {
+    /* Walk /proc/self/maps once to find the mapping that contains `addr`,
+     * and report whether it's writable. PT_GNU_RELRO sets the .got.plt
+     * region to r--p after the dynamic linker finishes binding. If an
+     * attacker mprotected it back to rw-p (mandatory before patching),
+     * we want to flag it. */
+    if (addr == 0) return 0;
+    OBFSTR_USE(maps_path, obs_proc_self_maps, 15);
+    FILE *f = fopen(maps_path, "r");
+    if (!f) return 0;
+    char line[512];
+    int found_readonly = 0;
+    while (fgets(line, sizeof(line), f)) {
+        unsigned long long start, end;
+        char perms[8] = {0};
+        if (sscanf(line, "%llx-%llx %4s", &start, &end, perms) != 3) continue;
+        if (addr < (uintptr_t)start || addr >= (uintptr_t)end) continue;
+        /* Address sits in this mapping. Inspect perms. */
+        found_readonly = (perms[1] == '-') ? 1 : 0;
+        break;
+    }
+    fclose(f);
+    return found_readonly;
+}
+
+static void init_got_guard(void) {
+    if (g_got_guard.ready) return;
+    got_find_ctx_t ctx = {
+        .target_substr = "libagpcore.so",
+        .guard = &g_got_guard,
+        .matched = 0,
+    };
+    dl_iterate_phdr(got_find_cb, &ctx);
+    if (g_got_guard.ready) {
+        g_got_guard.relro_was_readonly =
+            probe_got_region_is_readonly(g_got_guard.got_region_start);
+    }
+}
+
+__attribute__((annotate("fla"), annotate("sub")))
+static int check_got_integrity(void) {
+    if (!g_got_guard.ready) return 0;
+    for (size_t i = 0; i < g_got_guard.slot_count; i++) {
+        uintptr_t now = *(volatile uintptr_t *)g_got_guard.slots[i].addr;
+        if (now != g_got_guard.slots[i].baseline) {
+            return 1;
+        }
+    }
+    /* RELRO state regression: if the GOT region was read-only at init and
+     * is now writable, somebody mprotected it (typical first step of an
+     * inline-bind hook tool). */
+    if (g_got_guard.relro_was_readonly) {
+        int still_readonly = probe_got_region_is_readonly(g_got_guard.got_region_start);
+        if (!still_readonly) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /*
  * Check the first 16 bytes of critical functions for trampoline patterns.
  * Inline hooking frameworks (Frida, Substrate, etc.) overwrite the prologue
@@ -1285,6 +1462,9 @@ static int check_inline_hooks(void) {
     if (check_mapped_lib_guard_integrity()) {
         return 1;
     }
+    if (check_got_integrity()) {
+        return 1;
+    }
     return 0;
 }
 
@@ -1328,6 +1508,9 @@ static void *watchdog_thread(void *arg) {
         if (check_inline_hooks()) {
             ad_enforce("inline hook detected by watchdog");
         }
+        if (check_got_integrity()) {
+            ad_enforce("GOT hook detected by watchdog");
+        }
         sleep(2);
     }
     return NULL;
@@ -1350,10 +1533,15 @@ void enko_anti_debug_start(void) {
     }
 
     init_code_guard_baseline();
+    init_got_guard();
 
     /* Synchronous inline-hook check at JNI_OnLoad time — no race window. */
     if (check_inline_hooks()) {
         LOGW("inline hook detected at JNI_OnLoad");
+        _exit(1);
+    }
+    if (check_got_integrity()) {
+        LOGW("GOT hook detected at JNI_OnLoad");
         _exit(1);
     }
     if (check_suspicious_env()) {
