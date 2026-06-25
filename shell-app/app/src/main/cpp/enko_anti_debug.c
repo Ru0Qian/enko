@@ -1063,6 +1063,18 @@ static mapped_lib_guard_t g_mapped_lib_guards[] = {
     {"libflutter.so", 0U, 0U, 0U, 0U, {0}, {0}, MAPPED_LIB_GUARD_SEGMENT_LEN, 0},
 };
 
+/* Parallel guard for the r--p (read-only) mappings of libagpcore.so —
+ * .rodata, .data.rel.ro after RELRO bind, and (post-link) .got.
+ * The existing executable-segment guards only see r-xp mappings, so an
+ * attacker who patches the constant pool, jump tables, format strings,
+ * or anything else in r--p sections to disable detection would slip
+ * past them. We hash the same sampled-plus-periodic-full pattern as the
+ * executable guard. */
+static mapped_lib_guard_t g_rodata_guards[] = {
+    {"libagpcore.so", 0U, 0U, 0U, 0U, {0}, {0}, MAPPED_LIB_GUARD_SEGMENT_LEN, 0},
+};
+static volatile uint32_t g_rodata_guard_check_counter = 0;
+
 static const uint8_t *normalize_code_ptr(const void *fn) {
     uintptr_t p = (uintptr_t)fn;
 #if defined(__arm__) && !defined(__aarch64__)
@@ -1174,6 +1186,98 @@ static int check_code_guard_integrity(void) {
             if (verify_guard_segment(g, seg)) {
                 return 1;
             }
+        }
+    }
+    return 0;
+}
+
+/* Forward declarations: these helpers are defined further down (shared
+ * with the executable-mapping guard) but are needed by the read-only
+ * guard introduced above. */
+static void init_mapped_lib_guard(mapped_lib_guard_t *guard, const mapped_lib_scan_t *scan);
+static int verify_mapped_lib_segment(const mapped_lib_guard_t *guard, uint32_t seg_idx);
+
+static int scan_readonly_maps_for_lib(const char *lib_name, mapped_lib_scan_t *out) {
+    /* Locate the largest r--p (read-only, non-executable) mapping for the
+     * given lib. On Android this is .rodata + optionally .data.rel.ro
+     * after RELRO. We deliberately skip rw-p, which legitimately changes
+     * over the process lifetime (initialised globals, heap arenas). */
+    if (!lib_name || !out) return 0;
+    memset(out, 0, sizeof(*out));
+    OBFSTR_USE(maps_path, obs_proc_self_maps, 15);
+    FILE *f = fopen(maps_path, "r");
+    if (!f) return 0;
+    char line[768];
+    while (fgets(line, sizeof(line), f)) {
+        unsigned long long start = 0ULL;
+        unsigned long long end = 0ULL;
+        char perms[8] = {0};
+        if (sscanf(line, "%llx-%llx %7s", &start, &end, perms) != 3) continue;
+        /* Want r--p: read yes, write no, execute no. */
+        if (perms[0] != 'r' || perms[1] != '-' || perms[2] != '-') continue;
+        if (strstr(line, lib_name) == NULL) continue;
+        if (end <= start || (end - start) < MAPPED_LIB_GUARD_SEGMENT_LEN) continue;
+        size_t span = (size_t)(end - start);
+        out->exec_map_count++;
+        out->total_exec_size += span;
+        if (span > out->anchor_size) {
+            out->anchor_start = (uintptr_t)start;
+            out->anchor_size = span;
+        }
+    }
+    fclose(f);
+    return out->exec_map_count > 0U;
+}
+
+static int refresh_rodata_guards(void) {
+    const size_t guard_count = sizeof(g_rodata_guards) / sizeof(g_rodata_guards[0]);
+    for (size_t i = 0; i < guard_count; i++) {
+        mapped_lib_guard_t *guard = &g_rodata_guards[i];
+        mapped_lib_scan_t scan;
+        int found = scan_readonly_maps_for_lib(guard->lib_name, &scan);
+        if (!found) {
+            if (guard->ready) return 1;
+            continue;
+        }
+        if (!guard->ready) {
+            init_mapped_lib_guard(guard, &scan);
+            continue;
+        }
+        if (guard->map_start != scan.anchor_start ||
+            guard->map_size != scan.anchor_size ||
+            guard->exec_map_count != scan.exec_map_count ||
+            guard->total_exec_size != scan.total_exec_size) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+__attribute__((annotate("fla"), annotate("sub")))
+static int check_rodata_guard_integrity(void) {
+    if (refresh_rodata_guards()) return 1;
+    const size_t guard_count = sizeof(g_rodata_guards) / sizeof(g_rodata_guards[0]);
+    uint32_t seq = ++g_rodata_guard_check_counter;
+    int do_full_scan = ((seq % MAPPED_LIB_GUARD_FULL_SCAN_EVERY) == 0U) ? 1 : 0;
+
+    for (size_t i = 0; i < guard_count; i++) {
+        const mapped_lib_guard_t *guard = &g_rodata_guards[i];
+        if (!guard->ready) continue;
+        if (do_full_scan) {
+            for (uint32_t seg = 0; seg < MAPPED_LIB_GUARD_SEGMENT_COUNT; seg++) {
+                if (verify_mapped_lib_segment(guard, seg)) return 1;
+            }
+            continue;
+        }
+        uint32_t picked = 0U;
+        int sampled = 0;
+        while (sampled < MAPPED_LIB_GUARD_RANDOM_SAMPLES) {
+            uint32_t seg = next_guard_rand() % MAPPED_LIB_GUARD_SEGMENT_COUNT;
+            uint32_t bit = (1U << seg);
+            if (picked & bit) continue;
+            picked |= bit;
+            sampled++;
+            if (verify_mapped_lib_segment(guard, seg)) return 1;
         }
     }
     return 0;
@@ -1596,6 +1700,9 @@ static int check_inline_hooks(void) {
     if (check_got_integrity()) {
         return 1;
     }
+    if (check_rodata_guard_integrity()) {
+        return 1;
+    }
     return 0;
 }
 
@@ -1641,6 +1748,9 @@ static void *watchdog_thread(void *arg) {
         }
         if (check_got_integrity()) {
             ad_enforce("GOT hook detected by watchdog");
+        }
+        if (check_rodata_guard_integrity()) {
+            ad_enforce("rodata segment tamper detected by watchdog");
         }
         sleep(2);
     }
