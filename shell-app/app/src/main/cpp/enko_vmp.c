@@ -2498,10 +2498,248 @@ static jobject vmp_run_interpreter_v5(JNIEnv *env, const vmp_method_t *method,
                 regs[dst].i = (int32_t)(*env)->GetArrayLength(env, (jarray)regs[src1].l);
                 break;
 
+            /* ── Const family ───────────────────────────────────── */
+            case VMP_CONST:
+                regs[dst].i = imm32;
+                break;
+
+            case VMP_CONST_WIDE: {
+                /* W12: imm64 sits in the multi-byte payload (already
+                 * read into imm64 above). v4 paired CONST + CONST_WIDE_HI32
+                 * to carry 64-bit consts; v5 packs the full i64 inline. */
+                regs[dst].j = imm64;
+                if (dst + 1 < VMP_MAX_REGS) regs[dst + 1] = regs[dst];
+                break;
+            }
+
+            case VMP_CONST_STRING: {
+                const char *s = vmp_pool_get((uint32_t)imm32);
+                regs[dst].l = s ? (*env)->NewStringUTF(env, s) : NULL;
+                break;
+            }
+
+            case VMP_CONST_CLASS: {
+                const char *desc = vmp_pool_get((uint32_t)imm32);
+                regs[dst].l = desc ? vmp_resolve_class(env, desc) : NULL;
+                if ((*env)->ExceptionCheck(env)) {
+                    (*env)->PopLocalFrame(env, NULL);
+                    return NULL;
+                }
+                break;
+            }
+
+            /* ── Throw ──────────────────────────────────────────── */
+            case VMP_THROW: {
+                if (regs[dst].l) {
+                    (*env)->Throw(env, (jthrowable)regs[dst].l);
+                }
+                /* Exception handling for v5 is bound to byte-PC try blocks
+                 * (session 3.5). Until then, surface the throw to the
+                 * caller via JNI exception state. */
+                (*env)->PopLocalFrame(env, NULL);
+                return NULL;
+            }
+
+            /* ── Branches: rest of if-test family (W8, imm32 = byte offset) ── */
+            case VMP_IF_NE:
+                if (regs[dst].i != regs[src1].i) next_pc = (uint32_t)((int32_t)pc + imm32);
+                break;
+            case VMP_IF_LT:
+                if (regs[dst].i < regs[src1].i) next_pc = (uint32_t)((int32_t)pc + imm32);
+                break;
+            case VMP_IF_GE:
+                if (regs[dst].i >= regs[src1].i) next_pc = (uint32_t)((int32_t)pc + imm32);
+                break;
+            case VMP_IF_GT:
+                if (regs[dst].i > regs[src1].i) next_pc = (uint32_t)((int32_t)pc + imm32);
+                break;
+            case VMP_IF_LE:
+                if (regs[dst].i <= regs[src1].i) next_pc = (uint32_t)((int32_t)pc + imm32);
+                break;
+
+            /* ── If-testz family ────────────────────────────────── */
+            case VMP_IF_NEZ:
+                if (regs[dst].j != 0) next_pc = (uint32_t)((int32_t)pc + imm32);
+                break;
+            case VMP_IF_LTZ:
+                if (regs[dst].i < 0) next_pc = (uint32_t)((int32_t)pc + imm32);
+                break;
+            case VMP_IF_GEZ:
+                if (regs[dst].i >= 0) next_pc = (uint32_t)((int32_t)pc + imm32);
+                break;
+            case VMP_IF_GTZ:
+                if (regs[dst].i > 0) next_pc = (uint32_t)((int32_t)pc + imm32);
+                break;
+            case VMP_IF_LEZ:
+                if (regs[dst].i <= 0) next_pc = (uint32_t)((int32_t)pc + imm32);
+                break;
+
+            /* ── Compare ops ────────────────────────────────────── */
+            case VMP_CMP_LONG: {
+                int64_t a = regs[src1].j, b = regs[src2].j;
+                regs[dst].i = (a < b) ? -1 : (a > b) ? 1 : 0;
+                break;
+            }
+            case VMP_CMPL_FLOAT: {
+                float a = regs[src1].f, b = regs[src2].f;
+                regs[dst].i = (a > b) ? 1 : (a == b) ? 0 : -1;  /* NaN → -1 */
+                break;
+            }
+            case VMP_CMPG_FLOAT: {
+                float a = regs[src1].f, b = regs[src2].f;
+                regs[dst].i = (a < b) ? -1 : (a == b) ? 0 : 1;  /* NaN → +1 */
+                break;
+            }
+            case VMP_CMPL_DOUBLE: {
+                double a = regs[src1].d, b = regs[src2].d;
+                regs[dst].i = (a > b) ? 1 : (a == b) ? 0 : -1;
+                break;
+            }
+            case VMP_CMPG_DOUBLE: {
+                double a = regs[src1].d, b = regs[src2].d;
+                regs[dst].i = (a < b) ? -1 : (a == b) ? 0 : 1;
+                break;
+            }
+
+            /* ── int binops (extending session 2's ADD/SUB) ─────── */
+            case VMP_MUL_INT: regs[dst].i = regs[src1].i * regs[src2].i; break;
+            case VMP_DIV_INT:
+                if (regs[src2].i == 0) {
+                    vmp_throw_arith(env, "/ by zero");
+                    (*env)->PopLocalFrame(env, NULL);
+                    return NULL;
+                }
+                regs[dst].i = regs[src1].i / regs[src2].i;
+                break;
+            case VMP_REM_INT:
+                if (regs[src2].i == 0) {
+                    vmp_throw_arith(env, "/ by zero");
+                    (*env)->PopLocalFrame(env, NULL);
+                    return NULL;
+                }
+                regs[dst].i = regs[src1].i % regs[src2].i;
+                break;
+            case VMP_AND_INT: regs[dst].i = regs[src1].i & regs[src2].i; break;
+            case VMP_OR_INT:  regs[dst].i = regs[src1].i | regs[src2].i; break;
+            case VMP_XOR_INT: regs[dst].i = regs[src1].i ^ regs[src2].i; break;
+            case VMP_SHL_INT: regs[dst].i = regs[src1].i << (regs[src2].i & 31); break;
+            case VMP_SHR_INT: regs[dst].i = regs[src1].i >> (regs[src2].i & 31); break;
+            case VMP_USHR_INT:
+                regs[dst].i = (int32_t)((uint32_t)regs[src1].i >> (regs[src2].i & 31));
+                break;
+
+            /* ── long binops ─────────────────────────────────────── */
+            case VMP_ADD_LONG: regs[dst].j = regs[src1].j + regs[src2].j; break;
+            case VMP_SUB_LONG: regs[dst].j = regs[src1].j - regs[src2].j; break;
+            case VMP_MUL_LONG: regs[dst].j = regs[src1].j * regs[src2].j; break;
+            case VMP_DIV_LONG:
+                if (regs[src2].j == 0) {
+                    vmp_throw_arith(env, "/ by zero");
+                    (*env)->PopLocalFrame(env, NULL);
+                    return NULL;
+                }
+                regs[dst].j = regs[src1].j / regs[src2].j;
+                break;
+            case VMP_REM_LONG:
+                if (regs[src2].j == 0) {
+                    vmp_throw_arith(env, "/ by zero");
+                    (*env)->PopLocalFrame(env, NULL);
+                    return NULL;
+                }
+                regs[dst].j = regs[src1].j % regs[src2].j;
+                break;
+            case VMP_AND_LONG: regs[dst].j = regs[src1].j & regs[src2].j; break;
+            case VMP_OR_LONG:  regs[dst].j = regs[src1].j | regs[src2].j; break;
+            case VMP_XOR_LONG: regs[dst].j = regs[src1].j ^ regs[src2].j; break;
+            case VMP_SHL_LONG: regs[dst].j = regs[src1].j << (regs[src2].i & 63); break;
+            case VMP_SHR_LONG: regs[dst].j = regs[src1].j >> (regs[src2].i & 63); break;
+            case VMP_USHR_LONG:
+                regs[dst].j = (int64_t)((uint64_t)regs[src1].j >> (regs[src2].i & 63));
+                break;
+
+            /* ── float/double binops ────────────────────────────── */
+            case VMP_ADD_FLOAT:  regs[dst].f = regs[src1].f + regs[src2].f; break;
+            case VMP_SUB_FLOAT:  regs[dst].f = regs[src1].f - regs[src2].f; break;
+            case VMP_MUL_FLOAT:  regs[dst].f = regs[src1].f * regs[src2].f; break;
+            case VMP_DIV_FLOAT:  regs[dst].f = regs[src1].f / regs[src2].f; break;
+            case VMP_REM_FLOAT:  regs[dst].f = (float)fmod(regs[src1].f, regs[src2].f); break;
+            case VMP_ADD_DOUBLE: regs[dst].d = regs[src1].d + regs[src2].d; break;
+            case VMP_SUB_DOUBLE: regs[dst].d = regs[src1].d - regs[src2].d; break;
+            case VMP_MUL_DOUBLE: regs[dst].d = regs[src1].d * regs[src2].d; break;
+            case VMP_DIV_DOUBLE: regs[dst].d = regs[src1].d / regs[src2].d; break;
+            case VMP_REM_DOUBLE: regs[dst].d = fmod(regs[src1].d, regs[src2].d); break;
+
+            /* ── More unops / conversions ───────────────────────── */
+            case VMP_NOT_INT:    regs[dst].i = ~regs[src1].i; break;
+            case VMP_NEG_LONG:   regs[dst].j = -regs[src1].j; break;
+            case VMP_NOT_LONG:   regs[dst].j = ~regs[src1].j; break;
+            case VMP_NEG_FLOAT:  regs[dst].f = -regs[src1].f; break;
+            case VMP_NEG_DOUBLE: regs[dst].d = -regs[src1].d; break;
+            case VMP_INT_TO_FLOAT:    regs[dst].f = (float)regs[src1].i; break;
+            case VMP_INT_TO_DOUBLE:   regs[dst].d = (double)regs[src1].i; break;
+            case VMP_LONG_TO_INT:     regs[dst].i = (int32_t)regs[src1].j; break;
+            case VMP_LONG_TO_FLOAT:   regs[dst].f = (float)regs[src1].j; break;
+            case VMP_LONG_TO_DOUBLE:  regs[dst].d = (double)regs[src1].j; break;
+            case VMP_FLOAT_TO_INT:    regs[dst].i = (int32_t)regs[src1].f; break;
+            case VMP_FLOAT_TO_LONG:   regs[dst].j = (int64_t)regs[src1].f; break;
+            case VMP_FLOAT_TO_DOUBLE: regs[dst].d = (double)regs[src1].f; break;
+            case VMP_DOUBLE_TO_INT:   regs[dst].i = (int32_t)regs[src1].d; break;
+            case VMP_DOUBLE_TO_LONG:  regs[dst].j = (int64_t)regs[src1].d; break;
+            case VMP_DOUBLE_TO_FLOAT: regs[dst].f = (float)regs[src1].d; break;
+            case VMP_INT_TO_BYTE:     regs[dst].i = (int8_t)regs[src1].i; break;
+            case VMP_INT_TO_CHAR:     regs[dst].i = (uint16_t)regs[src1].i; break;
+            case VMP_INT_TO_SHORT:    regs[dst].i = (int16_t)regs[src1].i; break;
+
+            /* ── Type ops ───────────────────────────────────────── */
+            case VMP_NEW_INSTANCE: {
+                const char *desc = vmp_pool_get((uint32_t)imm32);
+                if (!desc) {
+                    vmp_throw_runtime(env, "v5: new-instance bad pool idx");
+                    (*env)->PopLocalFrame(env, NULL);
+                    return NULL;
+                }
+                jclass cls = vmp_resolve_class(env, desc);
+                if (!cls) {
+                    (*env)->PopLocalFrame(env, NULL);
+                    return NULL;
+                }
+                regs[dst].l = (*env)->AllocObject(env, cls);
+                if ((*env)->ExceptionCheck(env)) {
+                    (*env)->PopLocalFrame(env, NULL);
+                    return NULL;
+                }
+                break;
+            }
+            case VMP_CHECK_CAST: {
+                const char *desc = vmp_pool_get((uint32_t)imm32);
+                if (!desc) break;
+                if (regs[dst].l != NULL) {
+                    jclass cls = vmp_resolve_class(env, desc);
+                    if (cls && !(*env)->IsInstanceOf(env, regs[dst].l, cls)) {
+                        vmp_throw(env, "java/lang/ClassCastException", desc);
+                        (*env)->PopLocalFrame(env, NULL);
+                        return NULL;
+                    }
+                }
+                break;
+            }
+            case VMP_INSTANCE_OF: {
+                const char *desc = vmp_pool_get((uint32_t)imm32);
+                if (!desc) {
+                    regs[dst].i = 0;
+                    break;
+                }
+                jclass cls = vmp_resolve_class(env, desc);
+                regs[dst].i = (cls && regs[src1].l != NULL &&
+                               (*env)->IsInstanceOf(env, regs[src1].l, cls)) ? 1 : 0;
+                break;
+            }
+
             default: {
                 char msg[96];
                 snprintf(msg, sizeof(msg),
-                         "v5: opcode %d not implemented (session 2 minimal set)",
+                         "v5: opcode %d not implemented (session 3 set is ~50 ops; "
+                         "invokes / fields / arrays / switches land in session 3.5)",
                          real_op);
                 vmp_throw_runtime(env, msg);
                 (*env)->PopLocalFrame(env, NULL);
@@ -2513,29 +2751,28 @@ static jobject vmp_run_interpreter_v5(JNIEnv *env, const vmp_method_t *method,
         pc = next_pc;
     }
 
-    /* Box / surface return value, mirroring v4's return-value packaging. */
+    /* Auto-box the return value via the method's signature descriptor.
+     * The signature is interned in the string pool at method_sig_idx;
+     * the return-type portion lives after the last ')'. Reuse the v4
+     * boxing pipeline (vmp_box_from_reg + vmp_box_cache) so v4 and v5
+     * agree on autobox semantics. */
     jobject ret_obj = NULL;
-    switch (return_op) {
-        case VMP_RETURN_VOID:
-            ret_obj = NULL;
-            break;
-        case VMP_RETURN:
-        case VMP_RETURN_WIDE:
-        case VMP_RETURN_OBJECT:
-            /* Session 2: we don't auto-box ints/longs yet; that lives
-             * in the v4 path's vmp_box_cache. For RETURN_OBJECT we can
-             * just return the jobject. */
-            if (return_op == VMP_RETURN_OBJECT) {
-                ret_obj = ret_reg.l;
-            } else {
-                /* Smoke methods returning int/long are out of scope
-                 * for session 2; the auto-boxing wiring lands in
-                 * session 3 alongside field/invoke handlers. */
-                vmp_throw_runtime(env, "v5: int/long boxed return not yet implemented");
+    if (return_op == VMP_RETURN_OBJECT) {
+        ret_obj = ret_reg.l;
+    } else if (return_op != VMP_RETURN_VOID) {
+        const char *sig = vmp_pool_get(method->method_sig_idx);
+        const char *ret_desc = NULL;
+        if (sig) {
+            const char *paren = strrchr(sig, ')');
+            if (paren) ret_desc = paren + 1;
+        }
+        if (ret_desc && ret_desc[0]) {
+            ret_obj = vmp_box_from_reg(env, ret_desc, &ret_reg);
+            if ((*env)->ExceptionCheck(env)) {
+                (*env)->PopLocalFrame(env, NULL);
+                return NULL;
             }
-            break;
-        default:
-            break;
+        }
     }
     return (*env)->PopLocalFrame(env, ret_obj);
 }
