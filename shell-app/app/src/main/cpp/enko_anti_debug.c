@@ -27,6 +27,7 @@
 #include <arpa/inet.h>
 #include <link.h>
 #include <elf.h>
+#include <sys/utsname.h>
 
 #include <android/log.h>
 
@@ -723,9 +724,139 @@ static int check_app_process_origin(void) {
     return 0;
 }
 
+/*
+ * Detect Magisk and its DenyList (formerly MagiskHide) by inspecting the
+ * mount namespace. DenyList works by unmounting magisk-owned bind mounts
+ * inside the target process's namespace before the target is fork()ed
+ * from zygote — but the underlying tmpfs scaffolding that Magisk needs
+ * to function on the device (e.g. tmpfs on /sbin) is shared across the
+ * whole device and is never unmounted, so it survives DenyList.
+ *
+ * Signals (any one is sufficient):
+ *   - explicit magisk paths still mounted (DenyList disabled / failed)
+ *   - tmpfs mounted at /sbin (Magisk magic-mount scaffold)
+ *   - tmpfs mounted at /system/bin or /vendor (Magisk overlay)
+ *   - mount source containing /data/adb/modules (Zygisk module overlay)
+ *
+ * Returns 1 if any signal triggers, 0 otherwise.
+ */
+static int check_magisk_mount_artifacts(void) {
+    FILE *f = fopen("/proc/self/mountinfo", "r");
+    if (!f) return 0;
+    char line[1024];
+    int detected = 0;
+    while (fgets(line, sizeof(line), f)) {
+        /* Magisk's own bind-mount paths — should never appear on a clean device */
+        if (strstr(line, "/data/adb/magisk") ||
+            strstr(line, "/data/adb/modules") ||
+            strstr(line, "magisk.bin") ||
+            strstr(line, "/sbin/.magisk")) {
+            detected = 1;
+            break;
+        }
+        /* Match the standard mountinfo column layout to find mount point
+         * field (field 5: mount point) and filesystem type (after " - "). */
+        char *dash = strstr(line, " - ");
+        if (!dash) continue;
+        const char *fs_type = dash + 3;
+        /* mount point is field 5 (0-indexed 4) */
+        char *p = line;
+        for (int field = 1; field < 5 && *p; field++) {
+            while (*p && *p != ' ') p++;
+            while (*p == ' ') p++;
+        }
+        if (!*p) continue;
+        char *space = p;
+        while (*space && *space != ' ') space++;
+        size_t mnt_len = (size_t)(space - p);
+        if (mnt_len == 0 || mnt_len >= 256) continue;
+        char mnt[256];
+        memcpy(mnt, p, mnt_len);
+        mnt[mnt_len] = '\0';
+        if (strncmp(fs_type, "tmpfs", 5) == 0) {
+            /* Magisk magic-mount scaffold lives on tmpfs over /sbin.
+             * Some legitimate Android builds also tmpfs-mount /sbin
+             * during early boot; we only flag /sbin tmpfs visible to
+             * an app process, which is highly unusual. */
+            if (strcmp(mnt, "/sbin") == 0 ||
+                strncmp(mnt, "/sbin/", 6) == 0) {
+                detected = 1;
+                break;
+            }
+            /* tmpfs over /system/bin or /vendor — only Magisk-style overlays
+             * land here for app-visible mounts. */
+            if (strcmp(mnt, "/system/bin") == 0 ||
+                strcmp(mnt, "/vendor") == 0) {
+                detected = 1;
+                break;
+            }
+        }
+    }
+    fclose(f);
+    return detected;
+}
+
+/*
+ * Detect KernelSU and any root manager that patches /proc/version while
+ * leaving the actual kernel ABI untouched. uname() goes straight through
+ * the syscall (SYS_uname) and returns the raw kernel release string;
+ * /proc/version is a synthesized text file that KernelSU and similar
+ * root managers commonly rewrite to hide the "KernelSU" / "-kSU" /
+ * "-magisk-" suffix appended at build time.
+ *
+ * The detection compares uname.release (which the kernel emits directly
+ * from utsname()) against the first version-line in /proc/version. If
+ * uname.release contains a root-manager substring but /proc/version does
+ * not, the file has been tampered with.
+ *
+ * Returns 1 if mismatch indicates patching, 0 otherwise.
+ */
+static int check_kernelsu_uname_mismatch(void) {
+    struct utsname u;
+    if (uname(&u) != 0) return 0;
+    /* Lowercase copies for case-insensitive compare. */
+    char uname_release_l[128];
+    size_t k = 0;
+    for (size_t i = 0; i < sizeof(uname_release_l) - 1 && u.release[i]; i++, k++) {
+        uname_release_l[k] = (char)tolower((unsigned char)u.release[i]);
+    }
+    uname_release_l[k] = '\0';
+
+    char procver[512] = {0};
+    if (!read_small_text_file("/proc/version", procver, sizeof(procver))) {
+        /* /proc/version unreadable: not a root-tampering signal by itself. */
+        return 0;
+    }
+    char procver_l[512];
+    for (k = 0; k < sizeof(procver_l) - 1 && procver[k]; k++) {
+        procver_l[k] = (char)tolower((unsigned char)procver[k]);
+    }
+    procver_l[k] = '\0';
+
+    /* Strong signal: uname carries a root-manager marker but /proc/version
+     * has been scrubbed of it. */
+    static const char *markers[] = {
+        "kernelsu", "ksud", "-ksu", "-magisk-", "apatch", NULL,
+    };
+    for (int i = 0; markers[i]; i++) {
+        if (strstr(uname_release_l, markers[i]) &&
+            !strstr(procver_l, markers[i])) {
+            return 1;
+        }
+        if (strstr(procver_l, markers[i])) {
+            /* Marker still visible in /proc/version — root manager
+             * present and not hiding itself. */
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int check_system_integrity_indicators(void) {
     if (check_selinux_integrity()) return 1;
     if (check_app_process_origin()) return 1;
+    if (check_magisk_mount_artifacts()) return 1;
+    if (check_kernelsu_uname_mismatch()) return 1;
     return 0;
 }
 
