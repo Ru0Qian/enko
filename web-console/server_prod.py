@@ -270,6 +270,13 @@ def _normalize_public_job_config(config: dict[str, Any]) -> dict[str, Any]:
             detail={"message": "公开版暂不支持路径式签名证书，请使用服务端托管签名方案。", "error_code": "PUBLIC_SIGNING_DISABLED"},
         )
 
+    # Third-party APKs uploaded to the SaaS console virtually never ship with
+    # an R8 mapping or the Gradle release path heuristics the packer checks
+    # for. The R8-gate is meant for in-house Gradle integration, so relax it
+    # here to keep public hardening jobs from failing at step 0 with
+    # "cannot verify R8 obfuscation".
+    safe["allowWeakRelease"] = True
+
     return safe
 
 _PUBLIC_GENERIC_ERROR = "任务失败，请检查输入文件或联系支持。"

@@ -372,6 +372,8 @@ def build_command(config: dict[str, Any], job_dir: Path) -> tuple[list[str], str
         args.append("--flutter-mode")
     if config.get("commercialMode"):
         args.append("--commercial-mode")
+    if config.get("allowWeakRelease", False):
+        args.append("--allow-weak-release")
 
     phase_flags = {
         "extract": bool(config.get("featureExtract", True)),

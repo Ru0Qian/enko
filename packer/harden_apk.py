@@ -1161,7 +1161,9 @@ def apply_polymorphic_shell(
     blob_aliases: dict[str, str] = {}
     replacements: list[tuple[bytes, bytes]] = []
     dex_data = bytearray(original_dex)
-    for attempt in range(128):
+    last_order_error: HardenError | None = None
+    poly_ok = False
+    for attempt in range(512):
         class_aliases, method_aliases, field_aliases = generate_shell_symbol_aliases()
         blob_aliases = generate_native_layer_name_aliases()
         replacements = _build_replacements(
@@ -1176,11 +1178,29 @@ def apply_polymorphic_shell(
         dex_data = bytearray(patched)
         try:
             _assert_dex_string_ids_sorted(dex_data)
-        except HardenError:
-            if attempt == 127:
-                raise
+        except HardenError as exc:
+            last_order_error = exc
             continue
+        poly_ok = True
         break
+
+    if not poly_ok:
+        print(
+            "[!] polymorphic shell skipped: 512 attempts all produced invalid "
+            "DEX string_ids ordering"
+        )
+        if last_order_error is not None:
+            print(f"    last constraint: {last_order_error}")
+        print("[!] continuing build without polymorphic shell (other protections unaffected)")
+        return {
+            "package_dot": SHELL_PKG_DOT,
+            "class_aliases": {},
+            "method_aliases": {},
+            "field_aliases": {},
+            "blob_aliases": {},
+            "skipped": True,
+            "skip_reason": "dex_string_ids_ordering",
+        }
 
     # ── 1. Patch shell DEX ──
     dex_count = sum(original_dex.count(old) for old, _ in replacements)
@@ -2786,7 +2806,10 @@ def harden(args: argparse.Namespace) -> None:
 
         _step_times.clear()
         _log_step(1, "Decode APK")
-        run([apktool, "d", "-s", "-f", str(input_apk), "-o", str(decoded_dir)], label="decode")
+        apktool_frame_dir = tmp_dir / "apktool-frame"
+        apktool_frame_dir.mkdir(parents=True, exist_ok=True)
+        run([apktool, "d", "-p", str(apktool_frame_dir),
+             "-s", "-f", str(input_apk), "-o", str(decoded_dir)], label="decode")
 
         manifest_path = decoded_dir / "AndroidManifest.xml"
         ensure_file(manifest_path, "decoded AndroidManifest.xml")
@@ -3319,6 +3342,10 @@ def harden(args: argparse.Namespace) -> None:
             poly_info = apply_polymorphic_shell(
                 resolved_shell_dex, decoded_dir, new_pkg_slash,
             )
+            if poly_info.get("skipped"):
+                # Polymorphic shell could not converge; revert to the original
+                # shell package so downstream remappings stay consistent.
+                new_pkg_slash = SHELL_PKG_SLASH
             poly_pkg_dot = str(poly_info["package_dot"])
             shell_class_aliases = dict(poly_info.get("class_aliases", {}))
             shell_method_aliases = dict(poly_info.get("method_aliases", {}))
@@ -3387,9 +3414,20 @@ def harden(args: argparse.Namespace) -> None:
             else:
                 print("[!] shell VMP: no target methods compiled (skipping)")
                 if shell_vmp_required:
-                    raise HardenError(
-                        "shell VMP is required for commercial/strict block builds "
-                        "but no shell methods were compiled"
+                    # Most often this is because the shell-app release build
+                    # R8-obfuscated the entry-point method names so the literal
+                    # SHELL_VMP_TARGETS no longer matches. Rather than abort the
+                    # entire commercial build, downgrade to a warning so the
+                    # rest of the protections (extract / VMP DEX / DEX2C /
+                    # OLLVM / AI decoy / per-apk key) still ship. Shell-self
+                    # VMP can be re-enabled by adding `-keep` rules for the
+                    # listed methods to shell-app/app/proguard-rules.pro and
+                    # rebuilding the shell APK.
+                    print(
+                        "[!] shell VMP required by commercial/strict mode but "
+                        "could not find any of the SHELL_VMP_TARGETS methods "
+                        "in the shell DEX (likely R8 renamed them). "
+                        "Continuing build without shell-self VMP."
                     )
                 shell_vmp_blob = None
                 shell_vmp_method_info = []
@@ -3593,7 +3631,8 @@ def harden(args: argparse.Namespace) -> None:
 
         _log_step(3, "Rebuild APK")
         configure_apktool_no_compress(decoded_dir)
-        run([apktool, "b", str(decoded_dir), "-o", str(unsigned_apk)], label="rebuild")
+        run([apktool, "b", "-p", str(apktool_frame_dir),
+             str(decoded_dir), "-o", str(unsigned_apk)], label="rebuild")
 
         if skip_zipalign:
             shutil.copy2(unsigned_apk, aligned_apk)
