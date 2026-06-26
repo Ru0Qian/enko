@@ -162,6 +162,9 @@ public class ProxyApplication extends Application {
                 PayloadCrypto.wipe(dexPackage);
                 dexPackage = null;
 
+                android.util.Log.i("EnkoShell",
+                        "payload dex entries: count=" + dexEntries.size()
+                        + " names=" + dexEntriesNamesAndSizes(dexEntries));
                 ByteBuffer[] dexBuffers = toDirectBuffers(dexEntries);
                 dexEntries = null;
                 stageNs = logTimingStage("payload-decrypt-parse", stageNs);
@@ -211,9 +214,6 @@ public class ProxyApplication extends Application {
                                     "extract: bulk restore failed (rc="
                                             + restored + ")");
                         }
-                        for (ByteBuffer dexBuffer : dexBuffers) {
-                            refreshDexHeader(dexBuffer);
-                        }
                         Log.i(TAG, "extract: bulk restored "
                                 + restored + " method(s)");
                     }
@@ -222,6 +222,26 @@ public class ProxyApplication extends Application {
                                     ? "extract-on-demand-bind"
                                     : "extract-bulk-restore",
                             stageNs);
+                }
+
+                /* Refresh DEX header SHA-1 + Adler32 unconditionally before
+                 * handing the buffers to InMemoryDexClassLoader: VMP method-
+                 * stub patching at packer build time modifies code_item bytes
+                 * (replacing real Dalvik bytecode with native-stub branches)
+                 * and invalidates the original DEX header checksum. Without
+                 * this refresh, ART's openInMemoryDexFile path fails with
+                 * "Bad checksum" and silently DROPS the DEX from DexPathList
+                 * — leaving any class defined in it (e.g., ContentProvider
+                 * classes referenced from AndroidManifest) unfindable, which
+                 * surfaces later as a ClassNotFoundException at
+                 * installContentProviders time. This silently affected the
+                 * extract-on-demand path and any non-extract VMP-only build.
+                 * Refreshing here is safe: the buffers are direct memory we
+                 * own; ART verifies the checksum once at classloader-open
+                 * time, and any subsequent in-place per-class extract restore
+                 * does not re-trigger header verification. */
+                for (ByteBuffer dexBuffer : dexBuffers) {
+                    refreshDexHeader(dexBuffer);
                 }
 
                 System.gc();
@@ -564,6 +584,17 @@ public class ProxyApplication extends Application {
             return PayloadCrypto.inflateZlib(payload);
         }
         return payload;
+    }
+
+    private static String dexEntriesNamesAndSizes(List<PayloadParser.DexEntry> es) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < es.size(); i++) {
+            if (i > 0) sb.append(", ");
+            PayloadParser.DexEntry e = es.get(i);
+            sb.append(e.name).append("=").append(e.data != null ? e.data.length : -1);
+        }
+        sb.append("]");
+        return sb.toString();
     }
 
     private static ByteBuffer[] toDirectBuffers(
