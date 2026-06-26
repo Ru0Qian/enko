@@ -2015,7 +2015,17 @@ def write_runtime_config(
     build_epoch_sec: int = 0,
     build_version_code: int = 0,
     native_cfg_name: str = NATIVE_LAYER_CFG_NAME,
+    field_aliases: dict[str, str] | None = None,
 ) -> list[Path]:
+    """Write the encrypted runtime config that libagpcore.so reads at JNI_OnLoad.
+
+    When ``field_aliases`` is supplied, every cfg key that appears in the
+    map is rewritten to its alias before serialization. This must be the
+    SAME alias map ``apply_polymorphic_shell`` applied to libagpcore.so's
+    .rodata — otherwise the C lookup (using the aliased string literal)
+    won't find the key in the encrypted blob (which would still carry
+    the original key text). Both sides must agree.
+    """
 
     runtime_cfg = {
         "realApplicationClass": real_app_class or "",
@@ -2043,9 +2053,33 @@ def write_runtime_config(
         "buildEpochSec": str(int(build_epoch_sec)) if build_epoch_sec > 0 else "0",
         "buildVersionCode": str(int(build_version_code)) if build_version_code > 0 else "0",
     }
+    aliases = field_aliases or {}
+    print(f"[cfg-debug] field_aliases count = {len(aliases)}; "
+          f"realApplicationClass -> {aliases.get('realApplicationClass', '<unchanged>')!r}; "
+          f"realApplication -> {aliases.get('realApplication', '<unchanged>')!r}; "
+          f"expectedSignSha256 -> {aliases.get('expectedSignSha256', '<unchanged>')!r}")
+    # apply_polymorphic_shell substitutes byte-substring level (sort by
+    # source length descending). A cfg key like "realApplicationClass" can
+    # be partially substituted if the 20-char alias was rejected by the
+    # DEX-sort check but the 15-char "realApplication" alias survived —
+    # the resulting DEX/.so literal would be "<alias15>Class". We must
+    # apply the same byte-substring rewrite chain to cfg keys, not just
+    # dict-lookup the whole key, otherwise the cfg and the DEX/.so
+    # disagree about which key string was actually written.
+    alias_substitutions = sorted(
+        aliases.items(), key=lambda kv: len(kv[0]), reverse=True
+    )
+
+    def apply_substitutions(key: str) -> str:
+        out = key
+        for src, tgt in alias_substitutions:
+            out = out.replace(src, tgt)
+        return out
+
     lines = []
     for k, v in runtime_cfg.items():
-        lines.append(f"{k}={base64.b64encode(v.encode('utf-8')).decode('ascii')}")
+        out_k = apply_substitutions(k)
+        lines.append(f"{out_k}={base64.b64encode(v.encode('utf-8')).decode('ascii')}")
     config_body = "\n".join(lines) + "\n"
 
     # Encrypt the entire config with AES-GCM (replaces the old HMAC scheme).
@@ -3802,6 +3836,7 @@ def harden(args: argparse.Namespace) -> None:
             build_epoch_sec=build_epoch_sec,
             build_version_code=version_code,
             native_cfg_name=native_layer_names[NATIVE_LAYER_CFG_NAME],
+            field_aliases=shell_field_aliases,
         )
         cfg_paths_rel = [str(p.relative_to(decoded_dir)) for p in cfg_paths]
         print(f"[*] runtime config generated in native layer: {cfg_paths_rel} (payload key omitted)")

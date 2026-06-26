@@ -34,12 +34,15 @@ final class PayloadCrypto {
                 continue;
             }
             int idx = trimmed.indexOf('=');
-            if (idx <= 0 || idx >= trimmed.length() - 1) {
+            if (idx <= 0) {
                 continue;
             }
             String k = trimmed.substring(0, idx);
-            String v = trimmed.substring(idx + 1);
-            byte[] decoded = Base64.getDecoder().decode(v);
+            // Accept empty values — keys like realApplicationClass legitimately
+            // carry an empty base64 (no custom Application) and the entry must
+            // still surface in the map so RuntimeConfig.requireValue finds it.
+            String v = idx + 1 < trimmed.length() ? trimmed.substring(idx + 1) : "";
+            byte[] decoded = v.isEmpty() ? new byte[0] : Base64.getDecoder().decode(v);
             map.put(k, new String(decoded, StandardCharsets.UTF_8));
         }
         return map;

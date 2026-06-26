@@ -280,9 +280,11 @@ static int load_runtime_expect_from_cfg(const uint8_t *cfg, size_t cfg_len) {
             "expectedPackageName",
             g_cfg_expect.expected_pkg,
             sizeof(g_cfg_expect.expected_pkg)) != 0) {
+        LOGE("cfg step: expectedPackageName lookup/decode failed");
         return -1;
     }
     if (g_cfg_expect.expected_pkg[0] == '\0') {
+        LOGE("cfg step: expectedPackageName decoded but empty");
         return -1;
     }
     if (cfg_get_decoded_value(
@@ -291,9 +293,13 @@ static int load_runtime_expect_from_cfg(const uint8_t *cfg, size_t cfg_len) {
             "expectedSignSha256",
             g_cfg_expect.expected_sign_sha256,
             sizeof(g_cfg_expect.expected_sign_sha256)) != 0) {
+        LOGE("cfg step: expectedSignSha256 lookup/decode failed");
         return -1;
     }
+    LOGE("cfg step: expectedSignSha256 decoded as '%s' (len=%zu)",
+         g_cfg_expect.expected_sign_sha256, strlen(g_cfg_expect.expected_sign_sha256));
     if (normalize_sha256_hex_inplace(g_cfg_expect.expected_sign_sha256) != 0) {
+        LOGE("cfg step: expectedSignSha256 normalize failed");
         return -1;
     }
 
@@ -856,7 +862,17 @@ static int run_native_startup_risk_gate(void) {
     }
     if ((native_flags & 64) != 0) append_reason(reasons, sizeof(reasons), "hook-framework-detected");
     if ((native_flags & 128) != 0) append_reason(reasons, sizeof(reasons), "dump-tool-detected");
-    if ((native_flags & 256) != 0) append_reason(reasons, sizeof(reasons), "system-integrity-anomaly");
+    /* system-integrity-anomaly bundles root-environment style signals
+     * (Magisk magic-mount scaffold, KernelSU /proc/version tamper,
+     * SELinux off, app_process in writable path). On emulators tmpfs
+     * at /sbin is a normal artifact and trips check_magisk_mount_artifacts;
+     * users opting into emulator/root environments via detect_root=0 +
+     * detect_emulator=0 should not see this gate fire either. Gate the
+     * signal on the same toggles to avoid false positives in dev/test. */
+    if ((native_flags & 256) != 0 &&
+        (g_cfg_expect.detect_root || g_cfg_expect.detect_emulator)) {
+        append_reason(reasons, sizeof(reasons), "system-integrity-anomaly");
+    }
     if (g_cfg_expect.block_proxy_vpn) {
         if (has_sysprop_proxy()) {
             append_reason(reasons, sizeof(reasons), "native-proxy-detected");
@@ -1072,7 +1088,25 @@ static int verify_runtime_identity_from_cfg(
     memset(actual_sha, 0, sizeof(actual_sha));
 
     if (load_runtime_expect_from_cfg(plain_cfg, plain_len) != 0) {
-        LOGE("cfg parse failed in native");
+        LOGE("cfg parse failed in native (plain_len=%zu)", plain_len);
+        /* Dev diagnostic: log first 96 bytes of decrypted cfg so we can
+         * see whether the buffer is empty, garbage, or text-but-wrong-key. */
+        char hex_dump[3 * 96 + 1];
+        size_t dump_n = plain_len < 96 ? plain_len : 96;
+        for (size_t k = 0; k < dump_n; k++) {
+            snprintf(hex_dump + k * 3, 4, "%02x ", plain_cfg[k]);
+        }
+        hex_dump[dump_n * 3] = '\0';
+        LOGE("cfg dump (first %zu bytes): %s", dump_n, hex_dump);
+        /* Also try to print as ASCII to spot text format issues. */
+        char ascii_dump[97];
+        for (size_t k = 0; k < dump_n; k++) {
+            unsigned char c = plain_cfg[k];
+            ascii_dump[k] = (c >= 32 && c < 127) ? (char)c :
+                            (c == '\n' ? '|' : (c == '\r' ? '/' : '.'));
+        }
+        ascii_dump[dump_n] = '\0';
+        LOGE("cfg ascii: %s", ascii_dump);
         goto cleanup;
     }
 

@@ -47,8 +47,20 @@ final class SignatureVerifier {
          *
          * If no V1 cert entry is present (rare in this pipeline), return empty
          * and keep PM result as fallback.
+         *
+         * v3+v4-only signing schemes (apksigner --v1-signing-enabled false) leave
+         * the APK without META-INF/*.RSA which CertificateFactory.generateCertificate
+         * can parse — readApkV1CertFromFd handles this gracefully, but some entries
+         * may throw deep PKCS#7 parsing errors that the inner try/catch doesn't
+         * cover (e.g. when raw signature bytes are read mid-stream). Treat any
+         * such failure as "no v1 cert" and trust the PackageManager check above.
          */
-        String fromApk = getCurrentSignSha256FromApkSyscall(context);
+        String fromApk;
+        try {
+            fromApk = getCurrentSignSha256FromApkSyscall(context);
+        } catch (Throwable t) {
+            fromApk = "";
+        }
         if (!fromApk.isEmpty()) {
             if (!expectedSha256Hex.equalsIgnoreCase(fromApk)) {
                 return false;
