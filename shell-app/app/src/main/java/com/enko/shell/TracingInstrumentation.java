@@ -43,31 +43,6 @@ final class TracingInstrumentation extends Instrumentation {
             throws InstantiationException, IllegalAccessException, ClassNotFoundException {
         Log.i(TAG, "[trace] newActivity className=" + className);
         Activity a = orig.newActivity(cl, className, intent);
-        /* CRITICAL: ART's framework path on Android 9 (and AppCompatActivity
-         * in AndroidX) walks paths between newActivity and activity.attach
-         * that dereference activity.mBase via ContextWrapper.getApplicationInfo.
-         * Because activity.attach() is what eventually sets mBase, those
-         * paths SIGSEGV. We can't change framework code, so pre-seed the
-         * Activity's mBase with the running Application's mBase (a real
-         * ContextImpl). When activity.attach() later runs, ContextWrapper.
-         * attachBaseContext overwrites mBase with the proper Activity
-         * ContextImpl — our pre-seeded value is replaced cleanly. */
-        try {
-            android.app.Application app = (android.app.Application) Class
-                    .forName("android.app.ActivityThread")
-                    .getMethod("currentApplication").invoke(null);
-            if (app != null) {
-                Field appBaseF = ContextWrapper.class.getDeclaredField("mBase");
-                appBaseF.setAccessible(true);
-                Object appBase = appBaseF.get(app);
-                if (appBase != null) {
-                    appBaseF.set(a, appBase);
-                    Log.i(TAG, "[trace] pre-seeded mBase on " + className);
-                }
-            }
-        } catch (Throwable t) {
-            Log.w(TAG, "[trace] pre-seed mBase failed", t);
-        }
         Log.i(TAG, "[trace] newActivity returned " + dumpCtx(a));
         return a;
     }

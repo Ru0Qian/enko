@@ -4,91 +4,31 @@ import android.app.Application;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.util.Log;
-import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Map;
 
 /**
- * Reflection-based Application and ClassLoader replacement.
+ * Reflection-based Application reference replacement.
  *
- * Hooks into the Android framework internals to swap the shell Application
- * with the real (payload) Application after payload DEX loading.
+ * <p>Replaces ActivityThread / LoadedApk references that point at the shell
+ * Application (ProxyApplication) with the user's real Application. This is
+ * required so that code like {@code ((MyApp) ctx.getApplicationContext())}
+ * — common in Hilt, custom DI, and many libraries — finds the right class.
+ *
+ * <p>The historical {@code replaceAppClassLoader} method was removed when
+ * the shell switched from "replace LoadedApk.mClassLoader with a custom
+ * InMemoryDex one" to "append payload DEX elements directly into the
+ * framework PathClassLoader's pathList" — see {@link DexInjector}. With
+ * the new approach we leave every classloader-related framework field
+ * untouched, which fixes Android-9-era SIGSEGVs in AppCompatActivity's
+ * attach path and gets out of the way of Hilt / AndroidX assumptions.
  */
 public final class ApplicationReplacer {
 
     private static final String TAG = "EnkoShell";
 
     private ApplicationReplacer() {}
-
-    // ── ClassLoader replacement ───────────────────────────────────────────
-
-    @SuppressWarnings("unchecked")
-    public static void replaceAppClassLoader(
-            Context context, ClassLoader newLoader) throws Exception {
-        Class<?> activityThreadClass =
-                Class.forName("android.app.ActivityThread");
-        Method currentThreadMethod = activityThreadClass
-                .getDeclaredMethod("currentActivityThread");
-        currentThreadMethod.setAccessible(true);
-        Object activityThread = currentThreadMethod.invoke(null);
-
-        Field mPackagesField = activityThreadClass
-                .getDeclaredField("mPackages");
-        mPackagesField.setAccessible(true);
-        Map<String, WeakReference<?>> mPackages =
-                (Map<String, WeakReference<?>>)
-                        mPackagesField.get(activityThread);
-        WeakReference<?> loadedApkRef =
-                mPackages.get(context.getPackageName());
-        if (loadedApkRef == null || loadedApkRef.get() == null) {
-            throw new IllegalStateException("cannot resolve LoadedApk");
-        }
-
-        Object loadedApk = loadedApkRef.get();
-        Field mClassLoaderField = loadedApk.getClass()
-                .getDeclaredField("mClassLoader");
-        mClassLoaderField.setAccessible(true);
-        mClassLoaderField.set(loadedApk, newLoader);
-
-        /* Android 8+ also caches the classloader handed to Activity.attach
-         * in LoadedApk.mDefaultClassLoader. If we only replace mClassLoader,
-         * any Activity created after our swap may end up with mBase pointing
-         * at a ContextImpl whose mClassLoader (or any chained wrapper) was
-         * derived from the stale default. The Activity's getApplicationInfo
-         * call then deref's a half-initialized wrapper and SIGSEGVs. Replace
-         * both fields so the entire chain agrees on our payload loader. */
-        for (String alt : new String[]{"mDefaultClassLoader"}) {
-            try {
-                Field f = loadedApk.getClass().getDeclaredField(alt);
-                f.setAccessible(true);
-                f.set(loadedApk, newLoader);
-            } catch (NoSuchFieldException ignore) {
-                /* not present on this API level */
-            }
-        }
-
-        /* Also patch the Application's base ContextImpl mClassLoader so
-         * subsequent context.getClassLoader() inside the app sees our
-         * payload classloader (matters for AppComponentFactory lookups). */
-        try {
-            Object baseCtx = context;
-            if (baseCtx instanceof ContextWrapper) {
-                Field mBaseF = ContextWrapper.class.getDeclaredField("mBase");
-                mBaseF.setAccessible(true);
-                baseCtx = mBaseF.get(baseCtx);
-            }
-            if (baseCtx != null) {
-                Field mClassLoaderF = baseCtx.getClass().getDeclaredField("mClassLoader");
-                mClassLoaderF.setAccessible(true);
-                mClassLoaderF.set(baseCtx, newLoader);
-            }
-        } catch (NoSuchFieldException ignore) {
-        } catch (Throwable t) {
-            Log.w(TAG, "ContextImpl mClassLoader patch skipped: " + t.getMessage());
-        }
-    }
 
     // ── Real Application binding ──────────────────────────────────────────
 
