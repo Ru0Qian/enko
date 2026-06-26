@@ -47,6 +47,10 @@ static void ensure_vmp_tag(void) {
 #define LOGW(...) do { ensure_vmp_tag(); __android_log_print(ANDROID_LOG_WARN,  g_vmp_tag, __VA_ARGS__); } while(0)
 #define LOGE(...) do { ensure_vmp_tag(); __android_log_print(ANDROID_LOG_ERROR, g_vmp_tag, __VA_ARGS__); } while(0)
 
+/* Diagnostic: track which VMP-protected method is currently executing,
+ * so the JNI arg-pack sanity check can report the caller on bad refs. */
+static __thread const vmp_method_t *g_dbg_active_method = NULL;
+
 /* ── Obfuscated JNI class/method strings ──────────────────────────────── */
 OBFSTR_DECL(obs_libstub, 0xAB,0xAE,0xA5,0xA6,0xA0,0xB7,0xB4,0xB3,0xB2,0xA5,0xE9,0xB4,0xA8);
 OBFSTR_DECL(obs_stub_init, 0xA2,0xA9,0xAC,0xA8,0x98,0xB1,0xAA,0xB7,0x98,0xB4,0xB3,0xB2,0xA5,0x98,0xAE,0xA9,0xAE,0xB3);
@@ -1240,6 +1244,59 @@ slow_path:
 do_call:
     memset(last_result, 0, sizeof(*last_result));
     last_result->kind = VMP_LAST_VOID;
+
+    /* Diagnostic: catch refs that have suspicious low bits BEFORE handing
+     * them to ART, which would abort with "stale WeakGlobal" if the kind
+     * bits don't match what ART expects. Android 9 encodes indirect refs
+     * with kind in the low 2 bits (kLocal=01, kGlobal=10, kWeakGlobal=11).
+     * Any ref we pass with low bits = 11 means we somehow got hold of a
+     * weak ref, which is never produced by code we control — must be
+     * leakage from union-pun .i/.l overlap or stale uninit memory. */
+    {
+        const char *p_sig = NULL;
+        if (sig) {
+            p_sig = strchr(sig, '(');
+        } else {
+            const char *arrow = strstr(method_ref, "->");
+            p_sig = arrow ? strchr(arrow + 2, '(') : NULL;
+        }
+        if (p_sig) {
+            int dbg_ai = 0;
+            const char *p = p_sig + 1;
+            const char *rp_dbg = strchr(p_sig, ')');
+            while (p && rp_dbg && p < rp_dbg && *p && dbg_ai < argc) {
+                const char *e = vmp_desc_end(p);
+                if (!e) break;
+                if (p[0] == 'L' || p[0] == '[') {
+                    uintptr_t v = (uintptr_t) jargs[dbg_ai].l;
+                    if (v != 0 && (v & 3u) == 3u) {
+                        const char *caller_name = NULL;
+                        const char *caller_class = NULL;
+                        if (g_dbg_active_method) {
+                            caller_name = vmp_pool_get(g_dbg_active_method->method_name_idx);
+                            caller_class = vmp_pool_get(g_dbg_active_method->class_name_idx);
+                        }
+                        LOGE("VMP: arg %d of %s looks like WeakGlobal (0x%lx) — caller %s::%s — substituting NULL",
+                             dbg_ai, method_ref, (unsigned long)v,
+                             caller_class ? caller_class : "?",
+                             caller_name ? caller_name : "?");
+                        jargs[dbg_ai].l = NULL;
+                    }
+                }
+                p = e;
+                dbg_ai++;
+            }
+        }
+        if (!is_static && receiver) {
+            uintptr_t v = (uintptr_t) receiver;
+            if ((v & 3u) == 3u) {
+                LOGE("VMP: receiver of %s looks like WeakGlobal (0x%lx) — bailing",
+                     method_ref, (unsigned long)v);
+                rc = -1;
+                goto done;
+            }
+        }
+    }
 
     switch (ret_desc[0]) {
         case 'V':
@@ -2814,9 +2871,15 @@ static jobject vmp_run_interpreter_v5(JNIEnv *env, const vmp_method_t *method,
 
 static jobject vmp_run_interpreter(JNIEnv *env, const vmp_method_t *method,
                                     vmp_reg_t regs[VMP_MAX_REGS]) {
+    const vmp_method_t *_prev_dbg = g_dbg_active_method;
+    g_dbg_active_method = method;
+    (void)_prev_dbg;
+
     /* v5 blobs route through their own dispatcher. */
     if (_active_ctx->blob_version == kVmpVersionV5) {
-        return vmp_run_interpreter_v5(env, method, regs);
+        jobject r5 = vmp_run_interpreter_v5(env, method, regs);
+        g_dbg_active_method = _prev_dbg;
+        return r5;
     }
 
     if (method->bytecode_off < 0 || method->bytecode_size < 0) {
