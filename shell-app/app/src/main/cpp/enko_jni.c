@@ -1221,6 +1221,11 @@ static jstring nb_nativeComputeSha256(
         JNIEnv *env, jclass clz,
         jbyteArray jData);
 static void nb_nativeAntiDumpInit(JNIEnv *env, jclass clz);
+extern int enko_art_hook_install_ctxwrapper(JNIEnv *env);
+static jint nb_nativeInstallCtxWrapperHook(JNIEnv *env, jclass clz) {
+    (void)clz;
+    return (jint) enko_art_hook_install_ctxwrapper(env);
+}
 static void nb_nativeMarkNoDump(
         JNIEnv *env, jclass clz,
         jlong address, jint length);
@@ -1320,6 +1325,7 @@ static int register_native_bridge(JNIEnv *env) {
             {"nativeShellVmpLoad", "([B)I", (void *)nb_nativeShellVmpLoad},
             {"nativeShellVmpSetTier", "(I)I", (void *)nb_nativeShellVmpSetTier},
             {"nativeShellVmpRegisterNatives", "(Ljava/lang/ClassLoader;)I", (void *)nb_nativeShellVmpRegisterNatives},
+            {"nativeInstallCtxWrapperHook", "()I", (void *)nb_nativeInstallCtxWrapperHook},
     };
 
     const jint count = (jint)(sizeof(methods) / sizeof(methods[0]));
@@ -1349,10 +1355,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
      * before any key derivation or thread spawning. */
     enko_key_entropy_init();
 
-    /* Start anti-debug watchdog (ptrace self + background thread). */
     enko_anti_debug_start();
-
-    /* Anti-dump: PR_SET_DUMPABLE=0, fork detection, dump-tool scanner. */
     enko_anti_dump_init();
     reset_runtime_gates();
 
@@ -2057,6 +2060,8 @@ static jboolean nb_nativeCommitNativeLibsDigest(
         g_native_libs_verified = 1;
         return JNI_TRUE;
     }
+    LOGE("native libs sha mismatch: actual=%s expected=%s",
+         tmp, g_cfg_expect.native_libs_sha256);
     g_native_libs_verified = 0;
     return JNI_FALSE;
 }

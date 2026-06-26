@@ -12,6 +12,7 @@ set(AGPCORE_SRC_FILES
     enko_integrity.c
     enko_extract.c
     enko_anti_debug.c
+    enko_art_hook.c
 )
 
 # Files compiled by NDK (excludes OLLVM-compiled files when OLLVM is ON)

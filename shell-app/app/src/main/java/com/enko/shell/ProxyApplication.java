@@ -144,24 +144,80 @@ public class ProxyApplication extends Application {
         }
     }
 
+    /** Holder of install results — used by both ProxyApplication and
+     *  EnkoComponentFactory (which doesn't keep instance state). */
+    public static final class InstallResult {
+        public RuntimeConfig cfg;
+        public Application realApp;  // null if skipBind=true
+        public ByteBuffer[] dexBuffers;  // for caller to manage later
+    }
+
+    /** Entry from old ProxyApplication wrapping path: drives the full
+     *  install + binds realApplication into this instance. */
     private void installPayload(Context context) throws Exception {
+        InstallResult r = installPayloadCore(context, getClassLoader(),
+                getBaseContext(), false);
+        this.runtimeConfig = r.cfg;
+        this.realApplication = r.realApp;
+    }
+
+    /** Static install entry, callable from both ProxyApplication
+     *  (attachBaseContext) and EnkoComponentFactory (instantiateApplication).
+     *
+     *  @param context       Context for getApplicationInfo / shared prefs /
+     *                       PackageManager. The system Context works for
+     *                       most needs.
+     *  @param cl            ClassLoader to inject payload DEX into. Use
+     *                       the framework PathClassLoader.
+     *  @param baseForBind   Context to pass as baseContext when binding
+     *                       the real user Application (only used when
+     *                       skipBind=false). Pass null when skipBind=true.
+     *  @param skipBind      When true, don't reflectively create the user
+     *                       Application instance — the caller (e.g.
+     *                       EnkoComponentFactory) will let the framework
+     *                       instantiate it normally.
+     */
+    public static InstallResult installPayloadCore(
+            Context context, ClassLoader cl, Context baseForBind, boolean skipBind)
+            throws Exception {
+        InstallResult result = new InstallResult();
         long installStartNs = System.nanoTime();
         long stageNs = installStartNs;
         if (!NativeBridge.isAvailable()) {
             throw new SecurityException("native bridge unavailable");
         }
         NativeBridge.nativeAntiDumpInit();
+        /* Optional ART method hook on ContextWrapper: makes a set of
+         * accessors null-safe so AppCompatActivity / non-Flutter apps
+         * on Android 9 survive the SIGSEGV that fires when the
+         * framework reads activity.mBase before activity.attach() is
+         * complete. Disabled by default: it works incrementally
+         * (each hook unblocks the next), but the AppCompat code path
+         * has more than a dozen reachable Context accessors and
+         * hooking them all eventually pulls in Mterp-level interpreter
+         * casts that are out of scope for a hook framework this minimal.
+         *
+         * Flutter apps don't need this — they go through FlutterActivity
+         * not AppCompatActivity, and don't hit the problematic
+         * framework path. To opt in for testing:
+         *   System.setProperty("enko.arthook", "1")
+         * before NativeBridge static init. */
+        if ("1".equals(System.getProperty("enko.arthook"))) {
+            try {
+                int hookRc = NativeBridge.nativeInstallCtxWrapperHook();
+                Log.i(TAG, "ContextWrapper hook install rc=" + hookRc);
+            } catch (Throwable t) {
+                Log.w(TAG, "ContextWrapper hook install failed", t);
+            }
+        }
         ensureInitProviderPresent(context);
 
         String sourceApk = context.getApplicationInfo().sourceDir;
         try (ZipFile apkZip = new ZipFile(sourceApk)) {
             ApkEntryIndex entryIndex = buildApkEntryIndex(apkZip);
 
-            RuntimeConfig cfg = this.runtimeConfig;
-            if (cfg == null) {
-                cfg = loadRuntimeConfig(context, apkZip, entryIndex);
-            }
-            this.runtimeConfig = cfg;
+            RuntimeConfig cfg = loadRuntimeConfig(context, apkZip, entryIndex);
+            result.cfg = cfg;
             stageNs = logTimingStage("runtime-config", stageNs);
 
             IntegrityGate.enforceIdentity(context, cfg);
@@ -169,7 +225,7 @@ public class ProxyApplication extends Application {
             IntegrityGate.verifyNativeLibsIntegrity(
                     apkZip, entryIndex.nativeSoEntries, cfg);
             IntegrityGate.enforceRollbackGuard(context, cfg);
-            enforceRiskPolicy(context, cfg, "attach-preload");
+            evaluateRiskStatic(context, cfg, "attach-preload");
             stageNs = logTimingStage("integrity-and-risk-preload", stageNs);
 
             byte[] encrypted = null;
@@ -289,6 +345,7 @@ public class ProxyApplication extends Application {
                 }
 
                 System.gc();
+                result.dexBuffers = dexBuffers;
 
                 /* DEX INJECTION: rather than replacing the framework-
                  * created PathClassLoader with a custom InMemoryDex one
@@ -301,7 +358,7 @@ public class ProxyApplication extends Application {
                  * see the same PathClassLoader they would in unhardened
                  * builds; from their perspective the only thing that
                  * happened is "more classes became loadable." */
-                ClassLoader payloadLoader = getClassLoader();
+                ClassLoader payloadLoader = cl;
                 DexInjector.injectDexes(payloadLoader, dexBuffers);
 
                 /* For extract-on-demand: nativeExtractRestoreClass is
@@ -316,7 +373,7 @@ public class ProxyApplication extends Application {
                  * stripped method body on first touch. No Java hook
                  * required. */
 
-                enforceRiskPolicy(context, cfg, "attach-post-loader");
+                evaluateRiskStatic(context, cfg, "attach-post-loader");
                 stageNs = logTimingStage("payload-classloader", stageNs);
 
                 /* ---- DEX2C ---- */
@@ -385,19 +442,23 @@ public class ProxyApplication extends Application {
                     stageNs = logTimingStage("vmp-register", stageNs);
                 }
 
-                if (!cfg.realApplicationClass.isEmpty()) {
-                    realApplication =
+                if (!skipBind && !cfg.realApplicationClass.isEmpty()) {
+                    result.realApp =
                             ApplicationReplacer.bindRealApplication(
                                     payloadLoader,
                                     cfg.realApplicationClass,
-                                    getBaseContext());
+                                    baseForBind);
                     Log.i(TAG, "real Application bound: "
+                            + cfg.realApplicationClass);
+                } else if (skipBind) {
+                    Log.i(TAG, "skipBind=true (AppComponentFactory path);"
+                            + " framework will instantiate "
                             + cfg.realApplicationClass);
                 } else {
                     Log.i(TAG,
                             "no original application class configured");
                 }
-                enforceRiskPolicy(context, cfg, "attach-post-bind");
+                evaluateRiskStatic(context, cfg, "attach-post-bind");
                 stageNs = logTimingStage("real-application-bind", stageNs);
 
                 DexProtector.corruptDexHeaders(dexBuffers);
@@ -436,6 +497,7 @@ public class ProxyApplication extends Application {
                 }
             }
         }
+        return result;
     }
 
     private static long logTimingStage(String stage, long previousNs) {
@@ -452,6 +514,29 @@ public class ProxyApplication extends Application {
     }
 
     // ── Risk policy enforcement (instance state) ──────────────────────────
+
+    /**
+     * Static, side-effect-free variant of enforceRiskPolicy used from the
+     * AppComponentFactory install path (which has no instance state for the
+     * deferred-kill bookkeeping). Detects risks and logs decisions, but
+     * never terminates the process. Termination, if warranted, happens at
+     * the next enforceRiskPolicy call via the running Application instance.
+     */
+    static void evaluateRiskStatic(
+            Context context, RuntimeConfig cfg, String stage) {
+        if (cfg.isOffPolicy()) return;
+        List<String> reasons = new ArrayList<>();
+        reasons.addAll(NetworkRiskDetector.detectNetworkRisk(
+                context, cfg.blockProxyVpn));
+        if (NativeBridge.isAvailable()) {
+            IntegrityGate.collectNativeRiskReasons(cfg, reasons);
+        }
+        reasons.addAll(JavaHookDetector.detect());
+        if (reasons.isEmpty()) return;
+        Log.w(TAG, "risk environment detected (factory-stage): "
+                + NativeRiskEvaluator.joinReasons(reasons)
+                + " (stage=" + stage + ")");
+    }
 
     private void enforceRiskPolicy(
             Context context, RuntimeConfig cfg, String stage) {

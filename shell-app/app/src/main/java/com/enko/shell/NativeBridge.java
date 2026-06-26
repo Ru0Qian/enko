@@ -128,6 +128,21 @@ final class NativeBridge {
     static native void nativeAntiDumpInit();
 
     /**
+     * Install an ART method-level hook on ContextWrapper.attachBaseContext
+     * that removes the "Base context already set" IllegalStateException.
+     *
+     * <p>Returns 0 on success, negative on failure. On failure the original
+     * method body stays — Android-9-era AppCompatActivity-based apps will
+     * still SIGSEGV during Activity launch but no other regression occurs.
+     *
+     * <p>Patches ArtMethod.access_flags_ to add ACC_NATIVE, then binds our
+     * idempotent replacement via RegisterNatives. The replacement simply
+     * writes mBase without the redundant-attach guard. Best-effort; only
+     * activates on supported (SDK 26+) builds.
+     */
+    static native int nativeInstallCtxWrapperHook();
+
+    /**
      * Mark a native memory region as MADV_DONTDUMP.
      * Typically used on DirectByteBuffer backing memory that holds DEX data.
      *

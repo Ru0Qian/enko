@@ -680,6 +680,42 @@ def patch_manifest_app(manifest_text: str, proxy_app: str) -> str:
     return manifest_text.replace(full_tag, patched_tag, 1)
 
 
+def patch_manifest_app_component_factory(manifest_text: str, factory_class: str) -> str:
+    """Set android:appComponentFactory on the <application> tag.
+
+    On API 28+ this hooks our shell into the framework's component creation
+    pipeline (Application / Activity / Service / Provider / Receiver) before
+    any instance gets constructed. On API < 28 the attribute is ignored, and
+    the manifest's application:name (ProxyApplication) carries the load
+    independently. Any pre-existing appComponentFactory in the manifest
+    (e.g., androidx.core.app.CoreComponentFactory) is replaced — its
+    legitimate work (CompatibleComponent wrap) is a no-op for the typical
+    activity, and EnkoComponentFactory's super.instantiate* calls go through
+    the default AppComponentFactory implementation which is sufficient.
+    """
+    m = re.search(r"<application\b([^>]*)>", manifest_text, flags=re.IGNORECASE | re.DOTALL)
+    if not m:
+        raise HardenError("cannot find <application> tag in AndroidManifest.xml")
+
+    full_tag = m.group(0)
+    attrs = m.group(1)
+    if re.search(r'android:appComponentFactory\s*=\s*"[^"]*"', attrs, flags=re.IGNORECASE):
+        patched_tag = re.sub(
+            r'android:appComponentFactory\s*=\s*"[^"]*"',
+            f'android:appComponentFactory="{factory_class}"',
+            full_tag,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+    else:
+        if full_tag.endswith("/>"):
+            patched_tag = full_tag[:-2] + f' android:appComponentFactory="{factory_class}" />'
+        else:
+            patched_tag = full_tag[:-1] + f' android:appComponentFactory="{factory_class}">'
+
+    return manifest_text.replace(full_tag, patched_tag, 1)
+
+
 def patch_extract_native_libs(manifest_text: str) -> str:
     """Ensure extractNativeLibs is true so the system can handle our .dat blobs in lib/."""
     if re.search(r'android:extractNativeLibs\s*=\s*"true"', manifest_text, flags=re.IGNORECASE):
@@ -3544,6 +3580,7 @@ def harden(args: argparse.Namespace) -> None:
         poly_pkg_dot: str = SHELL_PKG_DOT  # default: no rename
         proxy_app_class = PROXY_APP_CLASS
         init_provider_class = INIT_PROVIDER_CLASS
+        polymorphic_factory_class: str | None = None
         shell_vmp_targets = shell_r8_targets
         shell_class_aliases: dict[str, str] = {}
         shell_method_aliases: dict[str, str] = {}
@@ -3575,6 +3612,10 @@ def harden(args: argparse.Namespace) -> None:
             )
             init_provider_class = remap_shell_class_name(
                 INIT_PROVIDER_CLASS, poly_pkg_dot, shell_class_aliases
+            )
+            polymorphic_factory_class = remap_shell_class_name(
+                "com.enko.shell.EnkoComponentFactory",
+                poly_pkg_dot, shell_class_aliases
             )
             # Remap L-descriptor class names: Lcom/enko/shell/Foo; → Lcom/xxxxx/yyyy/Foo;
             old_pkg_slash = SHELL_PKG_SLASH              # com/enko/shell
@@ -3788,12 +3829,25 @@ def harden(args: argparse.Namespace) -> None:
                     )
 
         patched_manifest = patch_manifest_app(manifest_text, proxy_app_class)
+        # On API 28+ the framework loads our AppComponentFactory before
+        # any component instance is constructed. EnkoComponentFactory.
+        # instantiateApplication does the dex injection BEFORE the
+        # framework instantiates the user's real Application — avoiding
+        # the AppCompat-on-Android-9 attach-time crash that affects the
+        # ProxyApplication wrap-and-replace pattern. On pre-28 devices
+        # the attribute is ignored and ProxyApplication carries the load.
+        factory_class = "com.enko.shell.EnkoComponentFactory"
+        if polymorphic_factory_class:
+            factory_class = polymorphic_factory_class
+        patched_manifest = patch_manifest_app_component_factory(
+            patched_manifest, factory_class)
         patched_manifest = ensure_uses_permission(patched_manifest, ACCESS_NETWORK_STATE)
         patched_manifest = patch_manifest_debuggable(patched_manifest, enabled=False)
         patched_manifest = patch_extract_native_libs(patched_manifest)
         patched_manifest = ensure_init_provider(patched_manifest, package_name, init_provider_class)
         manifest_path.write_text(patched_manifest, encoding="utf-8")
         print(f"[*] manifest application replaced with: {proxy_app_class}")
+        print(f"[*] manifest appComponentFactory set to: {factory_class}")
         print(f"[*] manifest permission ensured: {ACCESS_NETWORK_STATE}")
         print("[*] manifest debuggable forced to false")
         print("[*] manifest extractNativeLibs set to true")

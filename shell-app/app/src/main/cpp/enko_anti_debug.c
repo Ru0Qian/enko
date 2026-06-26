@@ -1855,9 +1855,17 @@ static int install_seccomp_filter(void) {
         BPF_STMT(BPF_RET + BPF_K,
                  SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA)),
 
-        BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, ENKO_NR_PROCESS_VM_READV, 0, 1),
-        BPF_STMT(BPF_RET + BPF_K,
-                 SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA)),
+        /* process_vm_readv must be ALLOWED. ART on Android 9 uses it
+         * during AppCompatActivity's attach path (likely in the implicit
+         * null-check signal handler chain or in JIT fast-path code
+         * dispatch). Blocking it crashes any AppCompat-based Activity
+         * with a SIGSEGV at boot-framework.oat ContextWrapper.
+         * getApplicationInfo+53 before the first frame draws. Verified
+         * by isolation on a stock Android 9 mumu emulator
+         * (samsung/star2qltezh: NewPipe v0.28.8). The attacker exposure
+         * from allowing process_vm_readv for ourselves is minimal —
+         * cross-process abuse still requires the target to grant ptrace
+         * permission, which Android's default policy denies. */
 
         BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, ENKO_NR_PROCESS_VM_WRITEV, 0, 1),
         BPF_STMT(BPF_RET + BPF_K,
