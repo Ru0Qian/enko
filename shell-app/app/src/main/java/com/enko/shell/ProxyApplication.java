@@ -69,11 +69,74 @@ public class ProxyApplication extends Application {
             ApplicationReplacer.replaceApplicationReferences(
                     this, realApplication);
             realApplication.onCreate();
+            dbgDumpAppState("after realApplication.onCreate");
         }
         if (runtimeConfig != null) {
             enforceRiskPolicy(this, runtimeConfig, "onCreate");
         }
         DexProtector.sAppCreateDone = true;
+
+        /* Replace the Instrumentation so we observe each step of the
+         * Activity launch sequence, narrowing down which call between
+         * ProxyApplication.onCreate-end and MainActivity.onCreate-start
+         * dereferences a null ContextWrapper.mBase. */
+        try {
+            Class<?> atC = Class.forName("android.app.ActivityThread");
+            Object at = atC.getMethod("currentActivityThread").invoke(null);
+            java.lang.reflect.Field instF = atC.getDeclaredField("mInstrumentation");
+            instF.setAccessible(true);
+            android.app.Instrumentation orig =
+                    (android.app.Instrumentation) instF.get(at);
+            instF.set(at, new TracingInstrumentation(orig));
+            Log.i(TAG, "[dbg] Instrumentation replaced with tracing variant");
+        } catch (Throwable t) {
+            Log.w(TAG, "[dbg] tracing Instrumentation install failed", t);
+        }
+
+        /* Hook every Activity lifecycle event so we can pinpoint which one
+         * trips the ContextWrapper.getApplicationInfo segfault. */
+        registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
+            @Override
+            public void onActivityCreated(android.app.Activity activity, android.os.Bundle bundle) {
+                dbgDumpActivityState("onActivityCreated", activity);
+            }
+            @Override public void onActivityStarted(android.app.Activity a) { dbgDumpActivityState("onActivityStarted", a); }
+            @Override public void onActivityResumed(android.app.Activity a) {}
+            @Override public void onActivityPaused(android.app.Activity a) {}
+            @Override public void onActivityStopped(android.app.Activity a) {}
+            @Override public void onActivitySaveInstanceState(android.app.Activity a, android.os.Bundle b) {}
+            @Override public void onActivityDestroyed(android.app.Activity a) {}
+        });
+    }
+
+    private static void dbgDumpAppState(String stage) {
+        try {
+            android.app.Application init = (android.app.Application) java.lang.Class
+                    .forName("android.app.ActivityThread")
+                    .getMethod("currentApplication").invoke(null);
+            java.lang.reflect.Field mBaseF = android.content.ContextWrapper.class.getDeclaredField("mBase");
+            mBaseF.setAccessible(true);
+            Object mBase = init == null ? null : mBaseF.get(init);
+            Log.i(TAG, "[dbg/" + stage + "] currentApplication="
+                    + (init == null ? "<null>" : init.getClass().getName())
+                    + " mBase=" + (mBase == null ? "<null>" : mBase.getClass().getName()));
+        } catch (Throwable t) {
+            Log.w(TAG, "[dbg/" + stage + "] dump failed: " + t);
+        }
+    }
+
+    private static void dbgDumpActivityState(String evt, android.app.Activity act) {
+        try {
+            java.lang.reflect.Field mBaseF = android.content.ContextWrapper.class.getDeclaredField("mBase");
+            mBaseF.setAccessible(true);
+            Object mBase = mBaseF.get(act);
+            android.app.Application app = act.getApplication();
+            Log.i(TAG, "[dbg/" + evt + "] " + act.getClass().getName()
+                    + " mBase=" + (mBase == null ? "<null>" : mBase.getClass().getName())
+                    + " getApplication=" + (app == null ? "<null>" : app.getClass().getName()));
+        } catch (Throwable t) {
+            Log.w(TAG, "[dbg/" + evt + "] failed: " + t);
+        }
     }
 
     // ── Payload installation ──────────────────────────────────────────────
