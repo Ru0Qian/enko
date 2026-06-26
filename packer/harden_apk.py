@@ -1823,9 +1823,17 @@ def compute_native_libs_sha256(decoded_apk_dir: Path) -> str:
     # Exclude the config blob — it contains nativeLibsSha256 itself,
     # so including it would create a circular dependency.
     cfg_name = NATIVE_LAYER_CFG_NAME
-    so_files = sorted(
-        f for f in lib_root.rglob("*.so") if f.name != cfg_name
-    )
+    # Java runtime sorts the zip entry strings with String.compareTo (pure
+    # ASCII codepoint order, which puts uppercase before lowercase). On
+    # Windows, sorting Path objects uses platform path comparison which
+    # collates case-insensitively and produces a different order — for
+    # example "libCtaApiLib.so" gets sorted AFTER "libapp.so" by the
+    # packer but BEFORE by the runtime. The bytes are then concatenated
+    # into SHA-256 in different orders and the integrity check fails at
+    # boot with "native libs integrity check failed". Sort by the POSIX
+    # relative path string (with '/') so both sides agree exactly.
+    so_files = [f for f in lib_root.rglob("*.so") if f.name != cfg_name]
+    so_files.sort(key=lambda p: p.relative_to(decoded_apk_dir).as_posix())
     if not so_files:
         return ""
     h = hashlib.sha256()

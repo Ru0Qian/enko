@@ -51,6 +51,43 @@ public final class ApplicationReplacer {
                 .getDeclaredField("mClassLoader");
         mClassLoaderField.setAccessible(true);
         mClassLoaderField.set(loadedApk, newLoader);
+
+        /* Android 8+ also caches the classloader handed to Activity.attach
+         * in LoadedApk.mDefaultClassLoader. If we only replace mClassLoader,
+         * any Activity created after our swap may end up with mBase pointing
+         * at a ContextImpl whose mClassLoader (or any chained wrapper) was
+         * derived from the stale default. The Activity's getApplicationInfo
+         * call then deref's a half-initialized wrapper and SIGSEGVs. Replace
+         * both fields so the entire chain agrees on our payload loader. */
+        for (String alt : new String[]{"mDefaultClassLoader"}) {
+            try {
+                Field f = loadedApk.getClass().getDeclaredField(alt);
+                f.setAccessible(true);
+                f.set(loadedApk, newLoader);
+            } catch (NoSuchFieldException ignore) {
+                /* not present on this API level */
+            }
+        }
+
+        /* Also patch the Application's base ContextImpl mClassLoader so
+         * subsequent context.getClassLoader() inside the app sees our
+         * payload classloader (matters for AppComponentFactory lookups). */
+        try {
+            Object baseCtx = context;
+            if (baseCtx instanceof ContextWrapper) {
+                Field mBaseF = ContextWrapper.class.getDeclaredField("mBase");
+                mBaseF.setAccessible(true);
+                baseCtx = mBaseF.get(baseCtx);
+            }
+            if (baseCtx != null) {
+                Field mClassLoaderF = baseCtx.getClass().getDeclaredField("mClassLoader");
+                mClassLoaderF.setAccessible(true);
+                mClassLoaderF.set(baseCtx, newLoader);
+            }
+        } catch (NoSuchFieldException ignore) {
+        } catch (Throwable t) {
+            Log.w(TAG, "ContextImpl mClassLoader patch skipped: " + t.getMessage());
+        }
     }
 
     // ── Real Application binding ──────────────────────────────────────────
@@ -77,10 +114,34 @@ public final class ApplicationReplacer {
         }
 
         Application app = (Application) instance;
+        /* Belt-and-suspenders: invoke attachBaseContext via reflection AND
+         * also write the mBase field directly. Reflection's Method.invoke
+         * with a method handle resolved from ContextWrapper.class dispatches
+         * virtually — if the realApp's class overrides attachBaseContext
+         * but forgets to call super.attachBaseContext(base), our mBase
+         * stays null and EVERY downstream ContextWrapper.getApplicationInfo
+         * call segfaults in ART's AOT'd boot.oat (ContextWrapper.mBase
+         * dereference at +53). Writing the field unconditionally afterwards
+         * is harmless when attachBaseContext did the right thing, and
+         * fixes the crash when it didn't. */
         Method attachBaseContextMethod = ContextWrapper.class
                 .getDeclaredMethod("attachBaseContext", Context.class);
         attachBaseContextMethod.setAccessible(true);
-        attachBaseContextMethod.invoke(app, baseContext);
+        try {
+            attachBaseContextMethod.invoke(app, baseContext);
+        } catch (Throwable t) {
+            Log.w(TAG, "attachBaseContext invocation threw — will set mBase directly", t);
+        }
+        try {
+            Field mBaseField = ContextWrapper.class.getDeclaredField("mBase");
+            mBaseField.setAccessible(true);
+            if (mBaseField.get(app) == null) {
+                mBaseField.set(app, baseContext);
+                Log.w(TAG, "mBase was null after attachBaseContext; set directly");
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "failed to backfill mBase on real Application", t);
+        }
         return app;
     }
 

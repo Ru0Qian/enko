@@ -178,8 +178,18 @@ final class NetworkRiskDetector {
 
     private static boolean hasVpnInterface() {
         try {
-            List<NetworkInterface> interfaces =
-                    Collections.list(NetworkInterface.getNetworkInterfaces());
+            /* Apps without android.permission.INTERNET (e.g. offline 2FA
+             * authenticators) get a null Enumeration back from
+             * NetworkInterface.getNetworkInterfaces() on Android 9+ —
+             * Collections.list(null) then segfaults in the ART AOT'd
+             * boot.oat path (no Java NPE, just a SIGSEGV at +122).
+             * Null-guard the enumeration before list-ifying. */
+            java.util.Enumeration<NetworkInterface> en =
+                    NetworkInterface.getNetworkInterfaces();
+            if (en == null) {
+                return false;
+            }
+            List<NetworkInterface> interfaces = Collections.list(en);
             for (NetworkInterface ni : interfaces) {
                 if (!ni.isUp()) {
                     continue;

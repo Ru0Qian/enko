@@ -50,6 +50,44 @@ final class EnkoInMemoryDexClassLoader extends BaseDexClassLoader {
             dcField.setAccessible(true);
             dcField.set(pathList, this);
 
+            /* Copy the parent's nativeLibraryDirectories into our pathList.
+             *
+             * InMemoryDexClassLoader does NOT receive a library search path —
+             * its DexPathList ends up with system lib dirs only. When this
+             * loader becomes the app's LoadedApk.mClassLoader, the linker
+             * namespace that gets created from it inherits ONLY those system
+             * dirs, so any dlopen() issued from a third-party native lib
+             * (e.g. libflutter.so calling dlopen("libapp.so")) can't find
+             * APKs' own .so files. Java-level findLibrary() delegation isn't
+             * enough — the namespace is set up at classloader-bind time and
+             * not consulted on every dlopen. Splicing the parent's native
+             * library dirs onto our DexPathList ensures the namespace
+             * created from us covers the APK's lib/<abi> directory. */
+            if (parent instanceof BaseDexClassLoader) {
+                Object parentPathList = plField.get(parent);
+                Field nldField = pathList.getClass().getDeclaredField("nativeLibraryDirectories");
+                nldField.setAccessible(true);
+                Field snldField = pathList.getClass().getDeclaredField("systemNativeLibraryDirectories");
+                snldField.setAccessible(true);
+                Object parentNLD = nldField.get(parentPathList);
+                Object parentSNLD = snldField.get(parentPathList);
+                nldField.set(pathList, parentNLD);
+                snldField.set(pathList, parentSNLD);
+
+                /* DexPathList caches the merged list of nativeLibraryPathElements,
+                 * which is what findLibrary actually walks. Re-derive it via the
+                 * makePathElements helper if present (API 26+), else clear so
+                 * the lazy path triggers on next lookup. */
+                try {
+                    Field elField = pathList.getClass().getDeclaredField("nativeLibraryPathElements");
+                    elField.setAccessible(true);
+                    Object parentEls = elField.get(parentPathList);
+                    elField.set(pathList, parentEls);
+                } catch (NoSuchFieldException ignore) {
+                    /* older API surface — relying on lazy initialization */
+                }
+            }
+
             plField.set(this, pathList);
         } catch (Exception e) {
             throw new RuntimeException("Failed to init EnkoInMemoryDexClassLoader", e);
